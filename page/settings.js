@@ -1,382 +1,200 @@
-/**
- * FocusPulse Smartwatch App - Zepp OS 1.0 (Xiaomi Smart Band 7)
- * Page: Settings (page/settings.js)
- * Screen: 192 x 490 pixels (Pure OLED Black)
- */
+const C = { bg: 0x050b0d, white: 0xf7fff9, muted: 0xb7c6c0, green: 0x44e4aa, blue: 0x79baff };
 
-function getGlobalData() {
-  let app = null;
+let pageAlive = false;
+let workWidget = null;
+let restWidget = null;
+let vibrator = null;
+let confirmText = null;
+let resetPendingAt = 0;
+
+function state() {
+  const a = getApp();
+  return (a._options && a._options.globalData) || a.globalData || globalThis.__FOCUSPULSE_GLOBAL__;
+}
+
+function createPageBackground() {
+  if (typeof hmUI === 'undefined' || !hmUI.widget || hmUI.widget.FILL_RECT === undefined) return;
   try {
-    if (typeof getApp === 'function') {
-      app = getApp();
+    hmUI.createWidget(hmUI.widget.FILL_RECT, { x: 0, y: 0, w: 192, h: 490, color: C.bg });
+  } catch (_e) {}
+}
+
+function label(x, y, w, h, value, size, color = C.white, extra = {}) {
+  return hmUI.createWidget(hmUI.widget.TEXT, {
+    x, y, w, h,
+    text: String(value),
+    color,
+    text_size: size,
+    align_h: hmUI.align.CENTER_H,
+    align_v: hmUI.align.CENTER_V,
+    text_style: hmUI.text_style.NONE,
+    ...extra,
+  });
+}
+
+function vibrate() {
+  try {
+    if (vibrator) {
+      vibrator.stop();
+      vibrator.scene = 23;
+      vibrator.start();
     }
-  } catch (e) {
-    console.log('[FocusPulse Settings] getApp error:', e);
-  }
+  } catch (_e) {}
+}
 
-  let gd = null;
-  if (app && app._options && app._options.globalData) {
-    gd = app._options.globalData;
-  } else if (app && app.globalData) {
-    gd = app.globalData;
-    if (app._options) app._options.globalData = gd;
-  } else if (globalThis.__FOCUSPULSE_GLOBAL__) {
-    gd = globalThis.__FOCUSPULSE_GLOBAL__;
+function render() {
+  if (!pageAlive) return;
+  const s = state();
+  try {
+    if (workWidget && hmUI.prop && hmUI.prop.MORE !== undefined) {
+      workWidget.setProperty(hmUI.prop.MORE, { text: s.workDuration + ' min', color: C.white });
+    }
+    if (restWidget && hmUI.prop && hmUI.prop.MORE !== undefined) {
+      restWidget.setProperty(hmUI.prop.MORE, { text: s.restDuration + ' min', color: C.white });
+    }
+  } catch (_e) {}
+}
+
+function change(key, delta) {
+  if (!pageAlive) return;
+  const s = state();
+  const min = key === 'workDuration' ? 5 : 1;
+  const max = key === 'workDuration' ? 60 : 30;
+  s[key] = Math.max(min, Math.min(max, s[key] + delta));
+  if (!s.timerRunning && !s.isPaused) {
+    s.secondsRemaining = (s.currentMode === 'WORK' ? s.workDuration : s.restDuration) * 60;
   } else {
-    gd = {
-      workDuration: 25,
-      restDuration: 5,
-      completedSessions: 4,
-      totalFocusSeconds: 135 * 60,
-      currentMode: 'WORK',
-      timerRunning: false,
-      isPaused: false,
-      secondsRemaining: 25 * 60,
-      lastBpm: 75,
-      isLiveHeartRate: false,
-      bleConnected: false,
-      aiRecommendation: 'AI: Heart rate spiked 20%.\nTake a 10 min break.',
-      lastTimestamp: 0,
-    };
-    globalThis.__FOCUSPULSE_GLOBAL__ = gd;
+    s.secondsRemaining = Math.min(s.secondsRemaining, (s.currentMode === 'WORK' ? s.workDuration : s.restDuration) * 60);
   }
+  render();
+}
 
-  if (app) {
-    if (!app._options) app._options = {};
-    app._options.globalData = gd;
-    app.globalData = gd;
+function confirmReset() {
+  if (!pageAlive) return;
+  if (Date.now() - resetPendingAt > 5000) {
+    resetPendingAt = Date.now();
+    try {
+      confirmText.setProperty(hmUI.prop.MORE, { text: 'Toca otra vez para confirmar', color: 0xffd89a });
+    } catch (_e) {}
+    return;
   }
-  globalThis.__FOCUSPULSE_GLOBAL__ = gd;
-  return gd;
+  resetPendingAt = 0;
+  const s = state();
+  s.timerRunning = false;
+  s.isPaused = false;
+  s.currentMode = 'WORK';
+  s.secondsRemaining = s.workDuration * 60;
+  s.lastTimestamp = Date.now();
+  try {
+    confirmText.setProperty(hmUI.prop.MORE, { text: 'Ciclo reiniciado', color: C.green });
+  } catch (_e) {}
+}
+
+function back() {
+  if (!pageAlive) return;
+  pageAlive = false;
+  try {
+    if (typeof hmApp !== 'undefined' && typeof hmApp.gotoPage === 'function') {
+      hmApp.gotoPage({ url: 'page/index' });
+      return;
+    }
+  } catch (_e) {}
+  try { if (typeof hmApp !== 'undefined' && typeof hmApp.goBack === 'function') hmApp.goBack(); } catch (_e) {}
+}
+
+function startNow() {
+  if (!pageAlive) return;
+  const s = state();
+  if (!s.timerRunning && !s.isPaused) {
+    s.secondsRemaining = (s.currentMode === 'WORK' ? s.workDuration : s.restDuration) * 60;
+  }
+  s.timerRunning = true;
+  s.isPaused = false;
+  s.lastTimestamp = Date.now();
+  back();
+}
+
+function stepButton(x, y, caption, action) {
+  return hmUI.createWidget(hmUI.widget.BUTTON, {
+    x, y, w: 46, h: 48, radius: 18,
+    normal_color: 0x243336,
+    press_color: 0x38514d,
+    text: caption,
+    color: C.white,
+    text_size: 22,
+    click_func: function () {
+      if (!pageAlive) return;
+      vibrate();
+      action();
+    },
+  });
+}
+
+function valueDisplay(x, y, key) {
+  const s = state();
+  return label(x, y, 60, 48, s[key] + ' min', 17, C.white, {
+    click_func: function () {
+      if (!pageAlive) return;
+      vibrate();
+      change(key, key === 'workDuration' ? 5 : 1);
+    },
+  });
 }
 
 Page({
-  state: {
-    workDuration: 25,
-    restDuration: 5,
-  },
-
-  vibrator: null,
-  workValueWidget: null,
-  restValueWidget: null,
-  summaryWidget: null,
-
   build() {
-    console.log('[FocusPulse Settings] Building Settings Page');
+    pageAlive = true;
+    resetPendingAt = 0;
+    createPageBackground();
+    try { vibrator = hmSensor.createSensor(hmSensor.id.VIBRATE); } catch (_e) {}
 
-    // 1. Sync global state
-    const globalData = getGlobalData();
-    this.state.workDuration = globalData.workDuration || 25;
-    this.state.restDuration = globalData.restDuration || 5;
+    label(20, 12, 152, 24, 'AJUSTES', 18, C.green);
+    label(16, 40, 160, 22, 'Enfoque · toca valor o +/−', 12, C.white);
+    stepButton(16, 66, '-', function () { change('workDuration', -5); });
+    workWidget = valueDisplay(66, 66, 'workDuration');
+    stepButton(130, 66, '+', function () { change('workDuration', 5); });
 
-    // 2. Initialize Vibrate sensor
-    try {
-      if (typeof hmSensor !== 'undefined' && hmSensor.id && hmSensor.id.VIBRATE) {
-        this.vibrator = hmSensor.createSensor(hmSensor.id.VIBRATE);
-      }
-    } catch (e) {
-      console.log('[FocusPulse Settings] Error creating vibrator:', e);
-    }
+    label(16, 120, 160, 22, 'Descanso · toca valor o +/−', 12, C.white);
+    stepButton(16, 146, '-', function () { change('restDuration', -1); });
+    restWidget = valueDisplay(66, 146, 'restDuration');
+    stepButton(130, 146, '+', function () { change('restDuration', 1); });
 
-    // 3. Header Title (fitted within capsule curvature at y: 30)
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 28,
-      y: 30,
-      w: 136,
-      h: 26,
-      color: 0x8e8e93,
-      text_size: 16,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: 'SETTINGS',
-    });
-
-    // 4. Section 1: Work Time (5 to 60 mins in steps of 5)
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 16,
-      y: 60,
-      w: 160,
-      h: 20,
-      color: 0x0a84ff,
-      text_size: 14,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: '⚡ Work Time',
-    });
-
-    // Work Time Minus Button (-)
     hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 20,
-      y: 84,
-      w: 46,
-      h: 46,
-      radius: 23,
-      normal_color: 0x1c1c1e,
-      press_color: 0x2c2c2e,
-      text: '-',
-      color: 0xffffff,
-      text_size: 26,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.changeWorkTime(-5);
-      },
+      x: 24, y: 202, w: 144, h: 46, radius: 23,
+      normal_color: 0x483126, press_color: 0x684331,
+      text: 'Reiniciar ciclo', color: C.white, text_size: 14,
+      click_func: function () { vibrate(); confirmReset(); },
     });
 
-    // Work Time Prominent Display
-    this.workValueWidget = hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 68,
-      y: 84,
-      w: 56,
-      h: 46,
-      color: 0xffffff,
-      text_size: 22,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: `${this.state.workDuration}m`,
-    });
+    confirmText = label(16, 250, 160, 20, '', 11, C.muted);
 
-    // Work Time Plus Button (+)
     hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 126,
-      y: 84,
-      w: 46,
-      h: 46,
-      radius: 23,
-      normal_color: 0x1c1c1e,
-      press_color: 0x2c2c2e,
-      text: '+',
-      color: 0xffffff,
-      text_size: 26,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.changeWorkTime(5);
-      },
+      x: 24, y: 274, w: 144, h: 46, radius: 23,
+      normal_color: 0x0c765a, press_color: 0x0a513f,
+      text: 'Iniciar ahora', color: C.white, text_size: 15,
+      click_func: function () { vibrate(); startNow(); },
     });
 
-    // 5. Section 2: Rest Time (1 to 30 mins in steps of 1)
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 16,
-      y: 148,
-      w: 160,
-      h: 20,
-      color: 0x30d158,
-      text_size: 14,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: '☕ Rest Time',
-    });
-
-    // Rest Time Minus Button (-)
     hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 20,
-      y: 174,
-      w: 46,
-      h: 46,
-      radius: 23,
-      normal_color: 0x1c1c1e,
-      press_color: 0x2c2c2e,
-      text: '-',
-      color: 0xffffff,
-      text_size: 26,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.changeRestTime(-1);
-      },
+      x: 24, y: 328, w: 144, h: 46, radius: 23,
+      normal_color: 0x243336, press_color: 0x38514d,
+      text: 'Volver', color: C.white, text_size: 15,
+      click_func: function () { vibrate(); back(); },
     });
 
-    // Rest Time Prominent Display
-    this.restValueWidget = hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 68,
-      y: 174,
-      w: 56,
-      h: 46,
-      color: 0xffffff,
-      text_size: 22,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: `${this.state.restDuration}m`,
-    });
-
-    // Rest Time Plus Button (+)
-    hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 126,
-      y: 174,
-      w: 46,
-      h: 46,
-      radius: 23,
-      normal_color: 0x1c1c1e,
-      press_color: 0x2c2c2e,
-      text: '+',
-      color: 0xffffff,
-      text_size: 26,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.changeRestTime(1);
-      },
-    });
-
-    // 6. Summary Card
-    this.summaryWidget = hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 10,
-      y: 236,
-      w: 172,
-      h: 44,
-      color: 0x8e8e93,
-      text_size: 13,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: (hmUI.text_style && hmUI.text_style.WRAP) || hmUI.text_style.NONE,
-      text: `Cycle Plan:\n${this.state.workDuration} min work • ${this.state.restDuration} min rest`,
-    });
-
-    // 7. Preset Button (25m / 5m default)
-    hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 28,
-      y: 296,
-      w: 136,
-      h: 36,
-      radius: 18,
-      normal_color: 0x1c1c1e,
-      press_color: 0x2c2c2e,
-      text: 'Default 25 / 5',
-      color: 0x8e8e93,
-      text_size: 13,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.state.workDuration = 25;
-        this.state.restDuration = 5;
-        this.updateDisplays();
-        this.persistData();
-      },
-    });
-
-    // 8. Back Button at bottom (positioned safely within curvature)
-    hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 24,
-      y: 368,
-      w: 144,
-      h: 48,
-      radius: 24,
-      normal_color: 0x0a84ff,
-      press_color: 0x0055b3,
-      text: '⬅ Back',
-      color: 0xffffff,
-      text_size: 16,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.persistData();
-        this.navigateBack();
-      },
-    });
+    render();
   },
-
-  changeWorkTime(delta) {
-    const next = Math.max(5, Math.min(60, this.state.workDuration + delta));
-    this.state.workDuration = next;
-    this.updateDisplays();
-    this.persistData();
-  },
-
-  changeRestTime(delta) {
-    const next = Math.max(1, Math.min(30, this.state.restDuration + delta));
-    this.state.restDuration = next;
-    this.updateDisplays();
-    this.persistData();
-  },
-
-  updateDisplays() {
-    if (this.workValueWidget) {
-      this.workValueWidget.setProperty(hmUI.prop.MORE, {
-        text: `${this.state.workDuration}m`,
-      });
-    }
-    if (this.restValueWidget) {
-      this.restValueWidget.setProperty(hmUI.prop.MORE, {
-        text: `${this.state.restDuration}m`,
-      });
-    }
-    if (this.summaryWidget) {
-      this.summaryWidget.setProperty(hmUI.prop.MORE, {
-        text: `Cycle Plan:\n${this.state.workDuration} min work • ${this.state.restDuration} min rest`,
-      });
-    }
-  },
-
-  persistData() {
-    const globalData = getGlobalData();
-    globalData.workDuration = this.state.workDuration;
-    globalData.restDuration = this.state.restDuration;
-
-    if (!globalData.timerRunning || globalData.isPaused) {
-      if (globalData.currentMode === 'REST') {
-        globalData.secondsRemaining = this.state.restDuration * 60;
-      } else {
-        globalData.secondsRemaining = this.state.workDuration * 60;
-      }
-    } else {
-      // Deduct elapsed time since last active anchor if timer was running
-      const anchor = globalData.lastActiveTimestamp || globalData.lastTimestamp;
-      if (anchor && anchor > 0) {
-        const elapsed = Math.floor((Date.now() - anchor) / 1000);
-        if (elapsed > 0) {
-          globalData.secondsRemaining = Math.max(0, globalData.secondsRemaining - elapsed);
-        }
-      }
-      // If timer is running, ensure remaining time doesn't exceed new duration
-      const maxSeconds = (globalData.currentMode === 'REST' ? this.state.restDuration : this.state.workDuration) * 60;
-      if (globalData.secondsRemaining > maxSeconds) {
-        globalData.secondsRemaining = maxSeconds;
-      }
-    }
-    const now = Date.now();
-    globalData.lastTimestamp = now;
-    globalData.lastActiveTimestamp = now;
-    console.log('[FocusPulse Settings] Persisted work:', globalData.workDuration, 'rest:', globalData.restDuration);
-  },
-
-  navigateBack() {
-    try {
-      if (typeof hmApp !== 'undefined' && typeof hmApp.goBack === 'function') {
-        hmApp.goBack();
-      } else {
-        hmApp.gotoPage({ url: 'page/index', file: 'page/index' });
-      }
-    } catch (e) {
-      console.log('[FocusPulse Settings] goBack failed, falling back to gotoPage:', e);
-      try {
-        hmApp.gotoPage({ url: 'page/index', file: 'page/index' });
-      } catch (err) {}
-    }
-  },
-
-  triggerVibration(scene) {
-    if (this.vibrator) {
-      try {
-        this.vibrator.stop();
-        this.vibrator.scene = scene;
-        this.vibrator.start();
-      } catch (e) {
-        console.log('[FocusPulse Settings] Vibration error:', e);
-      }
-    }
-  },
-
   onDestroy() {
-    console.log('[FocusPulse Settings] Page destroyed');
-    this.persistData();
-    if (this.vibrator) {
-      try {
-        this.vibrator.stop();
-        if (typeof hmSensor !== 'undefined' && typeof hmSensor.deleteSensor === 'function') {
-          hmSensor.deleteSensor(this.vibrator);
-        }
-      } catch (e) {}
-      this.vibrator = null;
-    }
+    pageAlive = false;
+    workWidget = null;
+    restWidget = null;
+    confirmText = null;
+    try {
+      if (vibrator) {
+        vibrator.stop();
+        if (hmSensor.deleteSensor) hmSensor.deleteSensor(vibrator);
+      }
+    } catch (_e) {}
+    vibrator = null;
   },
 });

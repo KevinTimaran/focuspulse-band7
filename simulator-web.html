@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulador Web — FocusPulse Smart Band 7</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #0b1412;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 16px;
+      letter-spacing: 2px;
+      color: #62E3AA;
+      margin-bottom: 8px;
+    }
+    p.sub {
+      color: #8da49c;
+      font-size: 13px;
+      margin-bottom: 24px;
+      text-align: center;
+      max-width: 360px;
+    }
+    /* Bisel exterior de la Smart Band 7 */
+    .bezel {
+      width: 220px;
+      height: 520px;
+      background: #17201e;
+      border: 5px solid #283732;
+      border-radius: 65px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 0 10px rgba(255,255,255,0.05);
+    }
+    /* Pantalla 192 x 490 px de la Xiaomi Smart Band 7 */
+    .screen {
+      width: 192px;
+      height: 490px;
+      background: #000;
+      border-radius: 52px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 10px 16px 10px;
+      text-align: center;
+      position: relative;
+    }
+    .header {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #44e4aa;
+    }
+    .mode {
+      font-size: 16px;
+      font-weight: 700;
+      color: #79baff;
+      margin-top: 4px;
+    }
+    .bpm {
+      font-size: 24px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-top: 6px;
+    }
+    .status {
+      font-size: 12px;
+      color: #44e4aa;
+      margin-top: 2px;
+    }
+    /* Círculo con temporizador */
+    .circle-container {
+      position: relative;
+      width: 146px;
+      height: 146px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 4px 0;
+    }
+    svg.arc-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 146px;
+      height: 146px;
+      transform: rotate(-90deg);
+    }
+    .arc-bg {
+      fill: none;
+      stroke: #25342e;
+      stroke-width: 8;
+    }
+    .arc-progress {
+      fill: none;
+      stroke: #44e4aa;
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 408;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+    .timer {
+      font-size: 32px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -1px;
+      z-index: 2;
+    }
+    .info-line {
+      font-size: 11px;
+      color: #44e4aa;
+    }
+    .advice-line {
+      font-size: 11px;
+      color: #b7c6c0;
+      max-width: 160px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    button.btn-action {
+      background: #0c765a;
+      color: #fff;
+      border: none;
+      border-radius: 24px;
+      width: 152px;
+      height: 44px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button.btn-action:hover { background: #0e8f6d; }
+    button.btn-action:active { background: #07523e; }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+    button.btn-sub {
+      background: #242e33;
+      color: #fff;
+      border: none;
+      border-radius: 16px;
+      width: 72px;
+      height: 38px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.btn-sub:hover { background: #323f46; }
+    .controls {
+      margin-top: 25px;
+      display: flex;
+      gap: 14px;
+    }
+    .controls button {
+      background: #172a24;
+      border: 1px solid #304e43;
+      color: #62E3AA;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>FOCUSPULSE — SIMULADOR WEB</h1>
+  <p class="sub">Simulador de Xiaomi Smart Band 7 en dimensiones reales (192 × 490 px)</p>
+
+  <div class="bezel">
+    <div class="screen">
+      <div>
+        <div class="header">FOCUSPULSE</div>
+        <div class="mode" id="modeText">ENFOQUE</div>
+        <div class="bpm" id="bpmText">74 BPM</div>
+        <div class="status" id="statusText">Pulso en vivo</div>
+      </div>
+
+      <div class="circle-container">
+        <svg class="arc-svg" viewBox="0 0 146 146">
+          <circle class="arc-bg" cx="73" cy="73" r="65"></circle>
+          <circle class="arc-progress" id="arcProgress" cx="73" cy="73" r="65"></circle>
+        </svg>
+        <div class="timer" id="timerText">25:00</div>
+      </div>
+
+      <div>
+        <div class="info-line" id="syncText">Simulador Web Activo</div>
+        <div class="advice-line" id="adviceText">Consejo: sesión en ritmo</div>
+      </div>
+
+      <button class="btn-action" id="toggleBtn" onclick="toggleTimer()">Iniciar / Pausar</button>
+
+      <div class="btn-row">
+        <button class="btn-sub" onclick="resetTimer()">Reiniciar</button>
+        <button class="btn-sub" onclick="changePulse()">+5 BPM</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button onclick="setFastMode()">Modo Rápido 10x</button>
+    <button onclick="toggleMode()">Alternar Trabajo/Descanso</button>
+  </div>
+
+  <script>
+    let running = false;
+    let seconds = 25 * 60;
+    let mode = 'WORK';
+    let bpm = 74;
+    let speed = 1000;
+    let timerInterval = null;
+
+    const timerText = document.getElementById('timerText');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const bpmText = document.getElementById('bpmText');
+    const modeText = document.getElementById('modeText');
+    const statusText = document.getElementById('statusText');
+    const arcProgress = document.getElementById('arcProgress');
+
+    function updateDisplay() {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      timerText.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      
+      const total = (mode === 'WORK' ? 25 : 5) * 60;
+      const circumference = 2 * Math.PI * 65; // ~408.4
+      const progress = 1 - (seconds / total);
+      arcProgress.style.strokeDashoffset = circumference * (1 - progress);
+
+      bpmText.textContent = `${bpm} BPM`;
+      modeText.textContent = mode === 'WORK' ? 'ENFOQUE' : 'DESCANSO';
+      modeText.style.color = mode === 'WORK' ? '#79baff' : '#44e4aa';
+      arcProgress.style.stroke = mode === 'WORK' ? '#79baff' : '#44e4aa';
+      statusText.textContent = running ? 'Pulso en vivo · activo' : 'Pulso en vivo';
+      toggleBtn.textContent = running ? 'Pausar' : (seconds < total ? 'Continuar' : 'Iniciar');
+      toggleBtn.style.background = running ? '#8a3028' : '#0c765a';
+    }
+
+    function toggleTimer() {
+      running = !running;
+      if (running) {
+        startTimer();
+      } else {
+        clearInterval(timerInterval);
+      }
+      updateDisplay();
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        if (seconds > 0) {
+          seconds--;
+          // Variación realista de pulso
+          bpm += Math.floor(Math.random() * 3) - 1;
+          bpm = Math.max(68, Math.min(95, bpm));
+        } else {
+          toggleMode();
+        }
+        updateDisplay();
+      }, speed);
+    }
+
+    function resetTimer() {
+      running = false;
+      clearInterval(timerInterval);
+      seconds = (mode === 'WORK' ? 25 : 5) * 60;
+      updateDisplay();
+    }
+
+    function changePulse() {
+      bpm = bpm >= 95 ? 68 : bpm + 5;
+      updateDisplay();
+    }
+
+    function toggleMode() {
+      mode = mode === 'WORK' ? 'REST' : 'WORK';
+      seconds = (mode === 'WORK' ? 25 : 5) * 60;
+      updateDisplay();
+    }
+
+    function setFastMode() {
+      speed = speed === 1000 ? 100 : 1000;
+      if (running) startTimer();
+    }
+
+    updateDisplay();
+  </script>
+</body>
+</html>
+

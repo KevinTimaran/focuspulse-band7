@@ -1,7 +1,7 @@
 {
   "configVersion": "v2",
   "app": {
-    "appId": 20000,
+    "appId": 1000005,
     "appName": "FocusPulse",
     "appType": "app",
     "version": {
@@ -9,11 +9,12 @@
       "name": "1.0.0"
     },
     "icon": "icon.png",
-    "vender": "zepp",
+    "vender": "FocusPulse",
     "description": "FocusPulse Smartwatch App for Xiaomi Smart Band 7"
   },
   "permissions": [
-    "data:user.hd.heart_rate"
+    "data:user.hd.heart_rate",
+    "device:os.vibrate"
   ],
   "runtime": {
     "apiVersion": {
@@ -23,7 +24,7 @@
     }
   },
   "targets": {
-    "bandseven": {
+    "band-7": {
       "module": {
         "page": {
           "pages": [
@@ -41,32 +42,16 @@
       },
       "platforms": [
         {
-          "name": "bandseven_global",
+          "name": "xiaomi-smart-band-7-international",
           "deviceSource": 263
         },
         {
-          "name": "bandseven_std",
+          "name": "xiaomi-smart-band-7-china",
           "deviceSource": 260
         },
         {
-          "name": "bandseven_nfc",
-          "deviceSource": 261
-        },
-        {
-          "name": "bandseven_2",
+          "name": "xiaomi-smart-band-7-nfc",
           "deviceSource": 262
-        },
-        {
-          "name": "bandseven_3",
-          "deviceSource": 264
-        },
-        {
-          "name": "bandseven_4",
-          "deviceSource": 265
-        },
-        {
-          "name": "bandseven_5",
-          "deviceSource": 266
         }
       ],
       "designWidth": 192

@@ -1,346 +1,90 @@
-/**
- * FocusPulse Smartwatch App - Zepp OS 1.0 (Xiaomi Smart Band 7)
- * Page: Stats (page/stats.js)
- * Screen: 192 x 490 pixels (Pure OLED Black)
- */
+const C = { bg: 0x050b0d, white: 0xf7fff9, green: 0x44e4aa, muted: 0xb7c6c0 };
 
-// Global reference to messaging.peerSocket listener callback to prevent QuickJS memory leaks on Xiaomi Smart Band 7
-let peerSocketCallback = null;
-globalThis.__STATS_PEERSOCKET_CB__ = null;
+let pageAlive = false;
+let vibrator = null;
+let adviceWidget = null;
 
-function getGlobalData() {
-  let app = null;
-  try {
-    if (typeof getApp === 'function') {
-      app = getApp();
-    }
-  } catch (e) {
-    console.log('[FocusPulse Stats] getApp error:', e);
-  }
-
-  let gd = null;
-  if (app && app._options && app._options.globalData) {
-    gd = app._options.globalData;
-  } else if (app && app.globalData) {
-    gd = app.globalData;
-    if (app._options) app._options.globalData = gd;
-  } else if (globalThis.__FOCUSPULSE_GLOBAL__) {
-    gd = globalThis.__FOCUSPULSE_GLOBAL__;
-  } else {
-    gd = {
-      workDuration: 25,
-      restDuration: 5,
-      completedSessions: 4,
-      totalFocusSeconds: 135 * 60,
-      currentMode: 'WORK',
-      timerRunning: false,
-      isPaused: false,
-      secondsRemaining: 25 * 60,
-      lastBpm: 75,
-      isLiveHeartRate: false,
-      bleConnected: false,
-      aiRecommendation: 'AI: Heart rate spiked 20%.\nTake a 10 min break.',
-      lastTimestamp: 0,
-    };
-    globalThis.__FOCUSPULSE_GLOBAL__ = gd;
-  }
-
-  if (app) {
-    if (!app._options) app._options = {};
-    app._options.globalData = gd;
-    app.globalData = gd;
-  }
-  globalThis.__FOCUSPULSE_GLOBAL__ = gd;
-  return gd;
+function state() {
+  const a = getApp();
+  return (a._options && a._options.globalData) || a.globalData || globalThis.__FOCUSPULSE_GLOBAL__;
 }
 
-function formatDuration(totalSeconds) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
+function createPageBackground() {
+  if (typeof hmUI === 'undefined' || !hmUI.widget || hmUI.widget.FILL_RECT === undefined) return;
+  try {
+    hmUI.createWidget(hmUI.widget.FILL_RECT, { x: 0, y: 0, w: 192, h: 490, color: C.bg });
+  } catch (_e) {}
+}
+
+function line(y, h, value, size, color = C.white) {
+  return hmUI.createWidget(hmUI.widget.TEXT, {
+    x: 16, y, w: 160, h,
+    text: String(value),
+    color,
+    text_size: size,
+    align_h: hmUI.align.CENTER_H,
+    align_v: hmUI.align.CENTER_V,
+    text_style: hmUI.text_style.WRAP || hmUI.text_style.NONE,
+  });
+}
+
+function vibrate() {
+  try {
+    if (vibrator) {
+      vibrator.stop();
+      vibrator.scene = 24;
+      vibrator.start();
+    }
+  } catch (_e) {}
+}
+
+function back() {
+  if (!pageAlive) return;
+  pageAlive = false;
+  try {
+    if (typeof hmApp !== 'undefined' && typeof hmApp.gotoPage === 'function') {
+      hmApp.gotoPage({ url: 'page/index' });
+      return;
+    }
+  } catch (_e) {}
+  try { if (typeof hmApp !== 'undefined' && typeof hmApp.goBack === 'function') hmApp.goBack(); } catch (_e) {}
 }
 
 Page({
-  state: {
-    completedSessions: 4,
-    totalFocusSeconds: 135 * 60,
-    aiMessage: 'AI: Heart rate spiked 20%.\nTake a 10 min break.',
-  },
-
-  vibrator: null,
-
   build() {
-    console.log('[FocusPulse Stats] Building Stats & AI Page');
-    this._isDestroyed = false;
-
-    // 1. Read global state
-    const globalData = getGlobalData();
-    this.state.completedSessions = globalData.completedSessions !== undefined ? globalData.completedSessions : 4;
-    this.state.totalFocusSeconds = globalData.totalFocusSeconds !== undefined ? globalData.totalFocusSeconds : (135 * 60);
-    if (globalData.aiRecommendation) {
-      this.state.aiMessage = globalData.aiRecommendation;
-    }
-
-    // 2. Initialize Vibrate sensor
-    try {
-      if (typeof hmSensor !== 'undefined' && hmSensor.id && hmSensor.id.VIBRATE) {
-        this.vibrator = hmSensor.createSensor(hmSensor.id.VIBRATE);
-      }
-    } catch (e) {
-      console.log('[FocusPulse Stats] Error creating vibrator:', e);
-    }
-
-    // 3. Header Title (fitted within capsule curvature at y: 30)
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 28,
-      y: 30,
-      w: 136,
-      h: 26,
-      color: 0x8e8e93,
-      text_size: 16,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: 'STATISTICS',
-    });
-
-    // 4. Daily Streak Card
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 16,
-      y: 60,
-      w: 160,
-      h: 20,
-      color: 0x8e8e93,
-      text_size: 13,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: 'Daily Streak',
-    });
-
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 16,
-      y: 82,
-      w: 160,
-      h: 30,
-      color: 0xff9f0a,
-      text_size: 19,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: `🔥 ${this.state.completedSessions} Sessions`,
-    });
-
-    // 5. Total Time Card
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 0,
-      y: 120,
-      w: 192,
-      h: 20,
-      color: 0x8e8e93,
-      text_size: 13,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: 'Total Focus Time',
-    });
-
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 0,
-      y: 142,
-      w: 192,
-      h: 30,
-      color: 0x64d2ff,
-      text_size: 19,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: `⏱️ ${formatDuration(this.state.totalFocusSeconds)}`,
-    });
-
-    // 6. AI Verdict Card
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 0,
-      y: 188,
-      w: 192,
-      h: 22,
-      color: 0xbf5af2,
-      text_size: 13,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: '⚡ AI PULSE VERDICT',
-    });
-
-    // Multi-line AI response block
-    this.aiTextWidget = hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 12,
-      y: 216,
-      w: 168,
-      h: 88,
-      color: 0xffffff,
-      text_size: 14,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: (hmUI.text_style && hmUI.text_style.WRAP) || hmUI.text_style.NONE,
-      text: this.state.aiMessage,
-    });
-
-    // Initialize real-time AI verdict receiver from companion
-    this.initMessaging();
-
-    // 7. Biometric & Phone Link Status
-    const isConn = !!globalData.bleConnected;
-    const isLiveHr = !!globalData.isLiveHeartRate;
-    const syncStatusText = `📱 iPhone: ${isConn ? 'OK' : '--'} • HR: ${isLiveHr ? 'LIVE' : 'SIM'}`;
-    const syncColor = isConn ? 0x30d158 : 0x8e8e93;
-
-    hmUI.createWidget(hmUI.widget.TEXT, {
-      x: 0,
-      y: 316,
-      w: 192,
-      h: 20,
-      color: syncColor,
-      text_size: 11,
-      align_h: hmUI.align.CENTER_H,
-      align_v: hmUI.align.CENTER_V,
-      text_style: hmUI.text_style.NONE,
-      text: syncStatusText,
-    });
-
-    // 8. Back Button at bottom (positioned safely within curvature)
+    pageAlive = true;
+    const s = state();
+    createPageBackground();
+    try { vibrator = hmSensor.createSensor(hmSensor.id.VIBRATE); } catch (_e) {}
+    line(14, 28, 'RESUMEN', 19, C.green);
+    line(48, 22, 'Sesiones completas', 14, C.muted);
+    line(72, 36, String(s.completedSessions), 26, C.white);
+    line(114, 22, 'Tiempo de enfoque', 14, C.muted);
+    line(138, 36, Math.floor(s.totalFocusSeconds / 60) + ' min', 24, C.white);
+    line(180, 22, 'CONSEJO DE IA', 14, C.green);
+    adviceWidget = line(206, 86, s.aiRecommendation || 'Sin consejo todavía', 12, C.white);
+    globalThis.__FOCUSPULSE_AI__ = function (message) {
+      if (!pageAlive || !adviceWidget) return;
+      vibrate();
+      try { adviceWidget.setProperty(hmUI.prop.MORE, { text: String(message) }); } catch (_e) {}
+    };
     hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 24,
-      y: 368,
-      w: 144,
-      h: 48,
-      radius: 24,
-      normal_color: 0x0a84ff,
-      press_color: 0x0055b3,
-      text: '⬅ Back',
-      color: 0xffffff,
-      text_size: 16,
-      click_func: () => {
-        this.triggerVibration(23);
-        this.navigateBack();
-      },
+      x: 24, y: 302, w: 144, h: 48, radius: 24,
+      normal_color: 0x0c765a, press_color: 0x0a513f,
+      text: 'Volver', color: C.white, text_size: 16,
+      click_func: function () { vibrate(); back(); },
     });
   },
-
-  navigateBack() {
-    try {
-      if (typeof hmApp !== 'undefined' && typeof hmApp.goBack === 'function') {
-        hmApp.goBack();
-      } else {
-        hmApp.gotoPage({ url: 'page/index', file: 'page/index' });
-      }
-    } catch (e) {
-      console.log('[FocusPulse Stats] goBack failed, falling back to gotoPage:', e);
-      try {
-        hmApp.gotoPage({ url: 'page/index', file: 'page/index' });
-      } catch (err) {}
-    }
-  },
-
-  triggerVibration(scene) {
-    if (this.vibrator) {
-      try {
-        this.vibrator.stop();
-        this.vibrator.scene = scene;
-        this.vibrator.start();
-      } catch (e) {
-        console.log('[FocusPulse Stats] Vibration error:', e);
-      }
-    }
-  },
-
-  initMessaging() {
-    try {
-      if (typeof messaging !== 'undefined' && messaging.peerSocket) {
-        // Remove existing listener before re-registering to prevent duplicate listeners
-        const existingCb = peerSocketCallback || globalThis.__STATS_PEERSOCKET_CB__;
-        if (existingCb) {
-          try {
-            if (typeof messaging.peerSocket.removeListener === 'function') {
-              messaging.peerSocket.removeListener('message', existingCb);
-            } else if (typeof messaging.peerSocket.off === 'function') {
-              messaging.peerSocket.off('message', existingCb);
-            } else if (typeof messaging.peerSocket.removeEventListener === 'function') {
-              messaging.peerSocket.removeEventListener('message', existingCb);
-            }
-          } catch (e) {}
-        }
-        if (typeof messaging.peerSocket.addListener === 'function') {
-          const self = this;
-          peerSocketCallback = (payload) => {
-            if (self._isDestroyed || !self.aiTextWidget) return;
-            try {
-              let data = payload;
-              if (typeof payload === 'string') {
-                try {
-                  data = JSON.parse(payload);
-                } catch (e) {
-                  data = null;
-                }
-              }
-              if (data && data.type === 'AI_VERDICT' && data.verdict) {
-                const newText = String(data.verdict);
-                self.state.aiMessage = newText;
-                const gd = getGlobalData();
-                gd.aiRecommendation = newText;
-                if (self.aiTextWidget && typeof self.aiTextWidget.setProperty === 'function') {
-                  self.aiTextWidget.setProperty(hmUI.prop.MORE, { text: newText });
-                }
-                console.log('[FocusPulse Stats] Live AI verdict displayed on screen:', newText);
-              }
-            } catch (err) {}
-          };
-          globalThis.__STATS_PEERSOCKET_CB__ = peerSocketCallback;
-          this.messageCallback = peerSocketCallback;
-          messaging.peerSocket.addListener('message', peerSocketCallback);
-        }
-      }
-    } catch (e) {
-      console.log('[FocusPulse Stats] Messaging init error:', e);
-    }
-  },
-
   onDestroy() {
-    console.log('[FocusPulse Stats] Page destroyed');
-    this._isDestroyed = true;
-
-    // Explicitly remove messaging.peerSocket listener to prevent QuickJS memory crashes on Xiaomi Smart Band 7
-    const cb = peerSocketCallback || globalThis.__STATS_PEERSOCKET_CB__;
-    if (typeof messaging !== 'undefined' && messaging.peerSocket && cb) {
-      try {
-        if (typeof messaging.peerSocket.removeListener === 'function') {
-          messaging.peerSocket.removeListener('message', cb);
-        } else if (typeof messaging.peerSocket.off === 'function') {
-          messaging.peerSocket.off('message', cb);
-        } else if (typeof messaging.peerSocket.removeEventListener === 'function') {
-          messaging.peerSocket.removeEventListener('message', cb);
-        }
-      } catch (e) {
-        console.log('[FocusPulse Stats] Error removing peerSocket listener:', e);
+    pageAlive = false;
+    adviceWidget = null;
+    globalThis.__FOCUSPULSE_AI__ = null;
+    try {
+      if (vibrator) {
+        vibrator.stop();
+        if (hmSensor.deleteSensor) hmSensor.deleteSensor(vibrator);
       }
-      peerSocketCallback = null;
-      globalThis.__STATS_PEERSOCKET_CB__ = null;
-      this.messageCallback = null;
-    }
-
-    this.aiTextWidget = null;
-
-    if (this.vibrator) {
-      try {
-        this.vibrator.stop();
-        if (typeof hmSensor !== 'undefined' && typeof hmSensor.deleteSensor === 'function') {
-          hmSensor.deleteSensor(this.vibrator);
-        }
-      } catch (e) {}
-      this.vibrator = null;
-    }
+    } catch (_e) {}
+    vibrator = null;
   },
 });
