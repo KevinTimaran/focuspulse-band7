@@ -206,7 +206,8 @@ function readHeart() {
   }
   try {
     const raw = heart && (typeof heart.getCurrent === 'function' ? heart.getCurrent() : heart.current);
-    const bpm = validBpm(raw) ? raw : (ticks >= 2 && heart && validBpm(heart.last) ? heart.last : null);
+    // Only a fresh CURRENT value counts as live; a cached `last` must not renew measuredAt.
+    const bpm = validBpm(raw) ? raw : null;
     if (validBpm(bpm)) {
       state.lastBpm = bpm;
       state.measuredAt = Date.now();
@@ -339,7 +340,7 @@ function tick(fromTimer) {
     if (heart) {
       try {
         const raw = typeof heart.getCurrent === 'function' ? heart.getCurrent() : heart.current;
-        const bpm = validBpm(raw) ? raw : (ticks >= 2 && validBpm(heart.last) ? heart.last : null);
+        const bpm = validBpm(raw) ? raw : null;
         if (validBpm(bpm)) {
           state.lastBpm = bpm;
           state.measuredAt = now;
