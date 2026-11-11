@@ -3,7 +3,7 @@ const initial = {
   workDuration:25, restDuration:5, completedSessions:0, totalFocusSeconds:0,
   currentMode:'WORK',timerRunning:false,isPaused:false,secondsRemaining:1500,
   lastBpm:null,isLiveHeartRate:false,measuredAt:0,bleConnected:false,cloudSynced:false,
-  syncError:'',aiRecommendation:'',lastVerdictId:'',lastTimestamp:0,
+  syncError:'',aiRecommendation:'',lastVerdictId:'',lastTimestamp:0,lastAckAt:0,
 };
 App({
   globalData:initial,
