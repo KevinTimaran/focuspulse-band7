@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: focuspulse-demo
+    runtime: node
+    rootDir: presentacion
+    buildCommand: echo "sin dependencias que instalar"
+    startCommand: node server.js
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      # La clave se escribe en el panel de Render (no va en el repositorio).
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

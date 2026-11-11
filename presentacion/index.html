@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FocusPulse · Simulación de presentación</title>
+<style>
+:root{
+  /* Android (focuspulse-mobile/src/ui/theme.ts) */
+  --bg:#07110F; --panel:#11201D; --panel2:#172A25; --stroke:#2C4840; --mint:#62E3AA;
+  --text:#F2FFF8; --muted:#A9C5B9; --blue:#9DC7FE; --amber:#FFD89A; --danger:#FFB6A9;
+  /* page chrome */
+  --page:#0a1210; --chrome:#101c19; --chrome2:#16251f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--page);color:var(--text);font-family:Roboto,"Segoe UI",system-ui,Arial,sans-serif;overflow:hidden}
+#viewport{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center}
+#stage{width:1500px;height:960px;transform-origin:top center;padding:18px 24px 14px}
+.top{display:flex;align-items:baseline;gap:18px;margin-bottom:10px}
+.top h1{font-size:20px;letter-spacing:2.4px;color:var(--mint);font-weight:800}
+.top p{color:var(--muted);font-size:14px}
+.top .tag{margin-left:auto;font-size:12px;color:var(--amber);border:1px solid #5b4a2a;border-radius:20px;padding:4px 12px}
+.cols{display:grid;grid-template-columns:318px 270px 300px 430px;gap:26px;align-items:start}
+h2.col{font-size:13px;letter-spacing:2px;color:var(--muted);font-weight:700;margin-bottom:10px;text-transform:uppercase}
+
+/* ---------- control panel ---------- */
+.panel{background:var(--chrome);border:1px solid #1f322c;border-radius:22px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:15px;height:872px;overflow:auto}
+.panel h3{font-size:12px;letter-spacing:1.8px;color:var(--mint);font-weight:800;margin-bottom:7px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid #2c4840;background:#0d1916;color:var(--text);border-radius:12px;padding:8px 11px;font-size:13px;cursor:pointer;font-weight:600}
+.chip.on{background:var(--mint);color:#06130e;border-color:var(--mint)}
+.chip small{display:block;font-weight:400;opacity:.75;font-size:11px;margin-top:1px}
+.btnp{width:100%;border:0;border-radius:14px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;background:var(--mint);color:#06130e}
+.btnp.alt{background:#1c2e29;color:var(--text);border:1px solid #2c4840}
+.btnp:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.switch{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text)}
+.switch input{width:38px;height:20px;accent-color:var(--mint)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:13px;color:var(--muted)}
+.kv b{color:var(--text);font-variant-numeric:tabular-nums}
+.note{font-size:11.5px;color:var(--muted);line-height:1.45}
+
+/* ---------- watch ---------- */
+.watchwrap{display:flex;flex-direction:column;align-items:center}
+.bezel{width:236px;height:534px;background:#17201e;border:6px solid #2a3a35;border-radius:66px;display:flex;align-items:center;justify-content:center;box-shadow:0 24px 60px rgba(0,0,0,.7),inset 0 0 12px rgba(255,255,255,.05);position:relative}
+.bezel.buzz{animation:buzz .42s linear}
+@keyframes buzz{0%,100%{transform:translate(0)}15%{transform:translate(-3px,1px)}30%{transform:translate(3px,-1px)}45%{transform:translate(-3px,-1px)}60%{transform:translate(3px,1px)}75%{transform:translate(-2px,0)}}
+.vibe{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--amber);opacity:0;transition:opacity .15s}
+.bezel.buzz .vibe{opacity:1}
+.wscreen{width:192px;height:490px;background:#000;border-radius:48px;overflow:hidden;position:relative;font-family:Roboto,"Segoe UI",Arial,sans-serif;user-select:none;touch-action:none}
+.wt{position:absolute;text-align:center;white-space:nowrap;overflow:hidden;font-weight:500;pointer-events:none}
+.wt.wrap{white-space:normal;line-height:1.2!important;display:flex;align-items:center;justify-content:center;font-weight:500}
+.wr{position:absolute;pointer-events:none}
+.wb{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;font-weight:500;white-space:nowrap}
+.wb:active{background:var(--press)!important}
+.wcap{margin-top:12px;font-size:12px;color:var(--muted);text-align:center;max-width:250px;min-height:34px}
+
+/* ---------- link column ---------- */
+.link{background:var(--chrome);border:1px solid #1f322c;border-radius:22px;padding:16px;height:872px;display:flex;flex-direction:column;gap:12px}
+.node{display:flex;align-items:center;gap:12px;background:#0d1916;border:1px solid #223630;border-radius:14px;padding:10px 12px;transition:border-color .2s,background .2s}
+.node .dot{width:11px;height:11px;border-radius:50%;background:#3a4f48;flex:none;transition:background .15s,box-shadow .15s}
+.node b{font-size:13px;display:block}
+.node span{font-size:11.5px;color:var(--muted)}
+.node.hit{border-color:var(--mint);background:#10241d}
+.node.hit .dot{background:var(--mint);box-shadow:0 0 10px var(--mint)}
+.node.ai.hit{border-color:var(--amber)}
+.node.ai.hit .dot{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+.arrow{text-align:center;color:#3f6a5a;font-size:13px;line-height:8px;height:10px}
+.pre{background:#08110e;border:1px solid #1f322c;border-radius:12px;padding:10px;font:11.5px/1.5 Consolas,"Courier New",monospace;color:#bfe9d6;white-space:pre-wrap;word-break:break-all;height:218px;overflow:hidden}
+.log{background:#08110e;border:1px solid #1f322c;border-radius:12px;padding:8px 10px;font-size:11.5px;color:var(--muted);flex:1;overflow:hidden;display:flex;flex-direction:column;gap:3px}
+.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log i{color:#5d8274;font-style:normal;margin-right:6px}
+
+/* ---------- phone ---------- */
+.phonewrap{display:flex;flex-direction:column;align-items:center}
+.phone{width:410px;height:864px;background:#0b0f0e;border:6px solid #26332f;border-radius:52px;padding:0;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.7)}
+.pscreen{position:absolute;inset:0;border-radius:44px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.sbar{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:12.5px;color:var(--text);font-weight:600}
+.cam{position:absolute;top:8px;left:50%;width:12px;height:12px;border-radius:50%;background:#000;border:1px solid #2a2f2e;transform:translateX(-50%)}
+.pcontent{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.pcontent::-webkit-scrollbar{display:none}
+.tabs{height:66px;flex:none;background:var(--panel);border-top:1px solid var(--stroke);display:flex;padding-top:7px;padding-bottom:8px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+.tab i{width:15px;height:15px;border-radius:5px;border:3px solid currentColor;display:block}
+.tab.on{color:var(--mint)}
+.navbar{height:18px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--panel)}
+.navbar i{width:110px;height:4px;border-radius:3px;background:#5d746b}
+
+/* RN styles (theme.ts) */
+.content{padding:26px 22px 34px;display:flex;flex-direction:column;gap:18px}
+.eyebrow{color:var(--mint);font-size:12px;font-weight:800;letter-spacing:2.3px}
+.title{color:var(--text);font-size:36px;font-weight:800;letter-spacing:-1.3px;line-height:41px;white-space:pre-line}
+.subtitle{color:var(--muted);font-size:15px;line-height:23px}
+.card{background:var(--panel);border:1px solid var(--stroke);border-radius:26px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.cardTitle{color:var(--muted);font-size:13px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.cardValue{color:var(--text);font-size:30px;font-weight:800;letter-spacing:-.8px}
+.body{color:var(--text);font-size:15px;line-height:23px}
+.muted{color:var(--muted);font-size:13px;line-height:20px}
+.btn{background:var(--mint);border-radius:17px;min-height:52px;padding:0 18px;display:flex;align-items:center;justify-content:center;color:var(--bg);font-size:16px;font-weight:800;border:0;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.48;cursor:default}
+.outline{border:1px solid var(--stroke);border-radius:17px;min-height:52px;padding:0 18px;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:15px;font-weight:700;background:transparent;cursor:pointer;font-family:inherit}
+.input{background:var(--panel2);border:1px solid var(--stroke);border-radius:15px;min-height:54px;color:var(--text);padding:0 16px;font-size:16px;display:flex;align-items:center}
+.input.ph{color:var(--muted)}
+.rowx{display:flex;gap:12px}
+.rowx>.card{flex:1;min-height:150px}
+.status{display:flex;align-items:center;gap:9px;margin-top:5px}
+.status i{height:9px;width:9px;border-radius:5px;display:block}
+.spin{width:20px;height:20px;border:3px solid rgba(7,17,15,.25);border-top-color:var(--bg);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* analysis tab */
+table.t{width:100%;border-collapse:collapse;font-size:12.5px;color:var(--text);font-variant-numeric:tabular-nums}
+table.t th{color:var(--muted);font-weight:700;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;text-align:right;padding:0 0 7px;border-bottom:1px solid var(--stroke)}
+table.t th:first-child,table.t td:first-child{text-align:left}
+table.t td{text-align:right;padding:8px 0;border-bottom:1px solid rgba(44,72,64,.55)}
+table.t tr:last-child td{border-bottom:0}
+.pill{display:inline-block;min-width:44px;text-align:center;border-radius:20px;padding:2px 7px;font-weight:800;font-size:12px}
+.p-hi{background:rgba(98,227,170,.16);color:var(--mint)}
+.p-mid{background:rgba(255,216,154,.16);color:var(--amber)}
+.p-lo{background:rgba(255,182,169,.16);color:var(--danger)}
+.bar{height:7px;border-radius:4px;background:#1c2e29;overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;border-radius:4px}
+.factor{display:grid;grid-template-columns:1fr auto;gap:5px 10px;align-items:center;font-size:13px}
+.factor .bar{grid-column:1/3}
+.evt{font-size:12.5px;display:grid;grid-template-columns:62px 1fr;gap:3px 8px;color:var(--text)}
+.evt span{color:var(--muted);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+  <div class="top">
+    <h1>FOCUSPULSE</h1>
+    <p>Simulación de presentación · Smart Band 7 ⇄ Zepp ⇄ Firebase ⇄ App Android</p>
+    <span class="tag">Pulso simulado · IA real (OpenAI)</span>
+  </div>
+  <div class="cols">
+    <aside>
+      <h2 class="col">Panel de simulación</h2>
+      <div class="panel" id="panel"></div>
+    </aside>
+    <section class="watchwrap">
+      <h2 class="col" style="align-self:flex-start">Smart Band 7</h2>
+      <div class="bezel" id="bezel"><div class="vibe">vibración</div><div class="wscreen" id="ws"></div></div>
+      <div class="wcap" id="wcap"></div>
+    </section>
+    <section>
+      <h2 class="col">Enlace de datos</h2>
+      <div class="link" id="link"></div>
+    </section>
+    <section class="phonewrap">
+      <h2 class="col" style="align-self:flex-start">App Android</h2>
+      <div class="phone"><div class="pscreen" id="ps"></div></div>
+    </section>
+  </div>
+</div></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   FocusPulse · simulación de presentación
+   Reproduce page/index.js, page/menu.js, page/settings.js, page/stats.js
+   (reloj) y src/app/*.tsx + src/ui/* (Android). Sin red ni dependencias.
+   ===================================================================== */
+const $=(s,el=document)=>el.querySelector(s);
+const E=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const pad2=n=>('0'+n).slice(-2);
+const fmtMS=n=>pad2(Math.floor(Math.max(0,n)/60))+':'+pad2(Math.max(0,n)%60);
+
+/* ---------- reloj simulado ---------- */
+const BASE=new Date(2026,10,11,10,0,0).getTime();
+let simNow=BASE;                       // ms simulados
+const clockHM=t=>{const d=new Date(t);return pad2(d.getHours())+':'+pad2(d.getMinutes())};
+const clockHMS=t=>{const d=new Date(t);return pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds())};
+function formatAge(ts){const s=Math.max(0,Math.floor((simNow-ts)/1000));if(s<5)return'Hace un instante';if(s<60)return'Hace '+s+' s';if(s<3600)return'Hace '+Math.floor(s/60)+' min';return clockHM(ts)}
+
+/* ---------- PRNG con semilla (demo repetible) ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rnd=mulberry32(20261111);
+const gauss=()=>{let u=0,v=0;while(!u)u=rnd();while(!v)v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+
+/* ---------- escenarios del generador de datos ---------- */
+const SCENARIOS={
+  calm:{name:'Concentrado',sub:'pulso estable ~75',base:(t)=>75+2.6*Math.sin(t/45)+1.2*Math.sin(t/13),noise:1.1,blip:{every:[90,150],amp:[3,6],len:[3,5]}},
+  stress:{name:'Estrés creciente',sub:'sube de 78 a 112',base:(t)=>78+34*(1-Math.exp(-t/700)),noise:2.4,blip:{every:[60,100],amp:[3,6],len:[4,6]}},
+  distracted:{name:'Distraído',sub:'picos irregulares',base:(t)=>81+5*Math.sin(t/17),noise:2.8,blip:{every:[25,50],amp:[10,17],len:[5,9]}},
+  recovery:{name:'Recuperación',sub:'baja de 104 a 70',base:(t)=>70+34*Math.exp(-t/520),noise:1.3,blip:{every:[120,200],amp:[2,4],len:[3,5]}},
+};
+function makeGen(key,seed){
+  const r=seed?mulberry32(seed):rnd;
+  const g=()=>{let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+  const sc=SCENARIOS[key];const st={t:0,cur:sc.base(0),blipT:0,blipLeft:0,blipAmp:0,next:sc.blip.every[0]+r()*(sc.blip.every[1]-sc.blip.every[0])};
+  const between=(a)=>a[0]+r()*(a[1]-a[0]);
+  return {next(rest){
+    st.t++;let target=sc.base(st.t);
+    if(rest)target=67+.25*(target-67);
+    if(st.blipLeft>0){target+=st.blipAmp;st.blipLeft--}
+    else if(--st.next<=0){st.blipLeft=Math.round(between(sc.blip.len));st.blipAmp=(r()<.5?-1:1)*between(sc.blip.amp);st.next=between(sc.blip.every)}
+    st.cur+= (target-st.cur)*.35+g()*sc.noise*.55;
+    return Math.round(clamp(st.cur,44,185));
+  },reset(){st.t=0;st.cur=sc.base(0)}};
+}
+
+/* ---------- estado del reloj (espejo de page/index.js) ---------- */
+const W={screen:'main',work:25,rest:5,mode:'WORK',running:false,paused:false,secs:1500,completed:0,totalFocus:0,
+  bpm:null,live:false,measuredAt:0,ble:false,cloud:false,lastAck:0,advice:'',verdictId:'',ticks:0,resetPending:0};
+const SIM={scenario:'calm',gen:null,sensor:true,speed:1,timer:null,autoNext:false,source:'scenario',manualBpm:74,manualNoise:true,series:[],seriesIdx:0};
+/* IA real (servidor /api/analyze). Si no hay servidor o clave, se usa el motor local y se avisa. */
+const AI={available:false,checked:false,model:'',busy:false,lastErr:'',bySession:{},calls:0,lastCall:0,lastCount:{}};
+SIM.gen=makeGen('calm');
+
+/* ---------- Firebase simulado + app Android ---------- */
+const F={session:null,readings:[],aiVerdict:null};
+const P={logged:false,tab:'resumen',asking:false,coachError:'',sessions:[],rest:[],events:[],open:null,lastLowAt:0,highFlag:false,lowFlag:false};
+let lastPacket=null;
+const LOG=[];
+function log(t){LOG.unshift({t:simNow,x:t});if(LOG.length>40)LOG.pop();dirtyLink=true}
+function evt(t){P.events.unshift({t:simNow,x:t});if(P.events.length>60)P.events.pop();dirtyPhone=true}
+
+/* ---------- utilidades de render del reloj ---------- */
+const hex=n=>'#'+n.toString(16).padStart(6,'0');
+const C={bg:'#050b0d',white:'#f7fff9',muted:'#b7c6c0',green:'#44e4aa',blue:'#79baff',amber:'#ffc857',red:'#ffb4ad',track:'#16353a',card:'#0d1d20',pill:'#16353a',dim:'#8fa39c'};
+const T=(x,y,w,h,txt,size,color,extra='')=>`<div class="wt" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;font-size:${size}px;line-height:${h}px;color:${color};${extra}">${E(txt)}</div>`;
+const TW=(x,y,w,h,txt,size,color)=>`<div class="wt wrap" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;font-size:${size}px;color:${color}">${E(txt)}</div>`;
+const R=(x,y,w,h,r,bg)=>`<div class="wr" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px;background:${bg}"></div>`;
+const B=(x,y,w,h,r,bg,press,txt,size,color,act)=>`<div class="wb" data-act="${act}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px;background:${bg};--press:${press};font-size:${size}px;color:${color}">${E(txt)}</div>`;
+
+/* ---------- lógica del reloj ---------- */
+const validBpm=n=>typeof n==='number'&&isFinite(n)&&n>=25&&n<=240&&Math.floor(n)===n;
+function vibrate(){const b=$('#bezel');b.classList.remove('buzz');void b.offsetWidth;b.classList.add('buzz')}
+function fullSecs(){return(W.mode==='WORK'?W.work:W.rest)*60}
+function toggleTimer(){
+  if(W.running){W.running=false;W.paused=true}
+  else{if(W.secs<=0)W.secs=fullSecs();W.running=true;W.paused=false}
+  sendTelemetry();dirtyWatch=true;
+}
+function completeCycle(){
+  W.running=false;W.paused=false;vibrate();
+  if(W.mode==='WORK'){W.completed++;W.totalFocus+=W.work*60;W.mode='REST';W.secs=W.rest*60}
+  else{W.mode='WORK';W.secs=W.work*60}
+  sendTelemetry();
+  if(SIM.autoNext){W.running=true;sendTelemetry()}
+  dirtyWatch=true;
+}
+function watchTick(){
+  W.ticks++;
+  if(W.running){W.secs=Math.max(0,W.secs-1);if(W.secs===0){completeCycle();return}}
+  if(W.measuredAt&&simNow-W.measuredAt>30000){W.live=false;W.bpm=null;W.measuredAt=0}
+  if(W.ticks%5===0)sendTelemetry();
+  if(W.screen==='main'||W.screen==='stats')dirtyWatch=true;
+}
+function sendTelemetry(){
+  const live=W.live&&validBpm(W.bpm);
+  const p={type:'TELEMETRY_PING',bpm:live?W.bpm:null,isLiveHeartRate:live,measuredAt:live?W.measuredAt:0,
+    timerRunning:W.running,isPaused:W.paused,secondsRemaining:W.secs,currentMode:W.mode,workDuration:W.work,restDuration:W.rest,
+    completedSessions:W.completed,totalFocusSeconds:W.totalFocus,timestamp:simNow};
+  lastPacket=p;W.ble=true;
+  pipeline(p);
+}
+
+/* ---------- canal: reloj → Zepp → Firebase → celular ---------- */
+const NODES=['n-watch','n-zepp','n-fb','n-phone'];
+function hit(id,ai){const n=document.getElementById(id);if(!n)return;n.classList.add('hit');setTimeout(()=>n.classList.remove('hit'),260)}
+function pipeline(p){
+  hit('n-watch');dirtyLink=true;
+  setTimeout(()=>hit('n-zepp'),110);
+  setTimeout(()=>{
+    hit('n-fb');
+    const live=p.isLiveHeartRate;
+    F.session={bpm:p.bpm,isLive:live,measuredAt:p.measuredAt,updatedAt:simNow,bleConnected:true,timerRunning:p.timerRunning,isPaused:p.isPaused,
+      secondsRemaining:p.secondsRemaining,currentMode:p.currentMode,workDuration:p.workDuration,restDuration:p.restDuration,
+      completedSessions:p.completedSessions,totalFocusSeconds:p.totalFocusSeconds};
+    if(live&&!F.readings.some(r=>r.t===p.measuredAt))F.readings.push({t:p.measuredAt,bpm:p.bpm});
+    if(F.readings.length>600)F.readings.shift();
+    // PONG de vuelta al reloj (cloudSynced)
+    W.cloud=true;W.lastAck=simNow;dirtyWatch=true;
+  },330);
+  setTimeout(()=>{hit('n-phone');ingest(F.session);dirtyPhone=true},600);
+}
+
+/* =====================================================================
+   MOTOR DE IA SIMULADO (corre en el celular con las lecturas del reloj)
+   ===================================================================== */
+const ZONES=[{k:'Reposo',lo:0,hi:68,c:'#9DC7FE'},{k:'Foco',lo:68,hi:82,c:'#62E3AA'},{k:'Activación',lo:82,hi:98,c:'#FFD89A'},{k:'Alto',lo:98,hi:999,c:'#FFB6A9'}];
+const DT=5; // segundos entre lecturas (un ping cada 5 s)
+function analyze(rs){
+  const n=rs.length;
+  if(n<3)return null;
+  const v=rs.map(r=>r.bpm),mean=v.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(v.reduce((a,b)=>a+(b-mean)**2,0)/n);
+  const min=Math.min(...v),max=Math.max(...v);
+  const t0=rs[0].t,xs=rs.map(r=>(r.t-t0)/60000),xm=xs.reduce((a,b)=>a+b,0)/n;
+  let num=0,den=0;for(let i=0;i<n;i++){num+=(xs[i]-xm)*(v[i]-mean);den+=(xs[i]-xm)**2}
+  const slope=den>0?num/den:0;                                  // lpm por minuto
+  let spikes=0;for(let i=1;i<n;i++)if(Math.abs(v[i]-v[i-1])>8)spikes++;
+  const focusShare=v.filter(b=>b>=68&&b<82).length/n;
+  const stab=100-clamp((sd-1.5)/8.5*100,0,100);
+  const zone=focusShare*100;
+  const trend=slope>0?100-clamp(slope*40,0,100):100;
+  const spike=100-clamp(spikes/n*500,0,100);
+  const score=Math.round(.35*stab+.30*zone+.20*trend+.15*spike);
+  return{n,mean,sd,min,max,slope,spikes,focusShare,stab,zone,trend,spike,score,label:score>=75?'Alta':score>=50?'Media':'Baja'};
+}
+const lvlClass=s=>s>=75?'p-hi':s>=50?'p-mid':'p-lo';
+const lvlColor=s=>s>=75?'var(--mint)':s>=50?'var(--amber)':'var(--danger)';
+
+// Ingesta de cada paquete (lo que haría el servicio de IA al recibir la sesión)
+function ingest(s){
+  if(!s)return;
+  const t=s.measuredAt;
+  const active=s.currentMode==='WORK'&&(s.timerRunning||s.isPaused);
+  if(active&&!P.open){
+    P.open={id:P.sessions.length+1,start:s.updatedAt,end:null,status:'En curso',rs:[],work:s.workDuration,completedAtStart:s.completedSessions};
+    P.sessions.push(P.open);evt('Sesión de enfoque iniciada ('+s.workDuration+' min)');
+  }
+  if(s.isLive&&t){
+    const r={t,bpm:s.bpm};
+    if(P.open&&s.currentMode==='WORK'){if(!P.open.rs.some(x=>x.t===t))P.open.rs.push(r)}
+    else if(s.currentMode==='REST'){if(!P.rest.some(x=>x.t===t))P.rest.push(r)}
+    if(s.bpm>=100&&!P.highFlag){P.highFlag=true;evt('Pulso alto detectado ('+s.bpm+' lpm)')}
+    if(s.bpm<95)P.highFlag=false;
+    if(P.open&&P.open.rs.length>=24){
+      const a=analyze(P.open.rs.slice(-36));
+      if(a&&a.score<50&&!P.lowFlag){P.lowFlag=true;evt('Concentración baja ('+a.score+'%)')}
+      if(a&&a.score>=60)P.lowFlag=false;
+    }
+  }
+  if(P.open){
+    if(s.completedSessions>P.open.completedAtStart){const done=P.open;closeSession('Completada',s.updatedAt);autoCoach(done)}
+    else if(!active&&s.currentMode==='WORK'){closeSession('Reiniciada',s.updatedAt)}
+  }
+}
+function closeSession(status,t){
+  if(!P.open)return;P.open.end=t;P.open.status=status;
+  evt('Sesión '+P.open.id+' '+(status==='Completada'?'completada':'reiniciada')+(P.open.rs.length?' · '+(analyze(P.open.rs)||{score:'--'}).score+'% concentración':''));
+  P.open=null;P.lowFlag=false;
+}
+function autoCoach(done){setTimeout(()=>{if(P.logged&&liveOK())requestCoach(true,done)},900)}
+
+function features(rs){
+  const a=analyze(rs);if(!a)return null;
+  const z=k=>rs.filter(r=>r.bpm>=ZONES[k].lo&&r.bpm<ZONES[k].hi).length/rs.length;
+  return{mean:+a.mean.toFixed(1),sd:+a.sd.toFixed(2),min:a.min,max:a.max,slopePerMinute:+a.slope.toFixed(2),spikes:a.spikes,
+    zoneShares:{reposo:+z(0).toFixed(2),foco:+z(1).toFixed(2),activacion:+z(2).toFixed(2),alto:+z(3).toFixed(2)}};
+}
+function sample(rs,max){if(rs.length<=max)return rs;const out=[];for(let i=0;i<max;i++)out.push(rs[Math.floor(i*(rs.length-1)/(max-1))]);return out}
+async function checkAI(){
+  try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();AI.available=!!j.ai;AI.model=j.model||'';AI.lastErr=j.ai?'':'El servidor no tiene OPENAI_API_KEY'}
+  catch{AI.available=false;AI.lastErr='Sin servidor (abre la página desde el servidor de la demo)'}
+  AI.checked=true;dirtyPhone=true;dirtyLink=true;
+}
+// Llama a la IA real; devuelve el análisis o null (y deja el motivo en AI.lastErr)
+async function runAI(ses,reason){
+  if(!AI.available||!ses||ses.rs.length<3)return null;
+  if(AI.busy)return null;
+  AI.busy=true;dirtyPhone=true;hit('n-ai');log('IA real: analizando sesión '+ses.id+' ('+reason+')');
+  const win=ses.end?ses.rs:ses.rs.slice(-36);
+  const f=features(win);
+  try{
+    const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      mode:ses.end?'WORK':(F.session?F.session.currentMode:'WORK'),workMinutes:ses.work||W.work,elapsedMinutes:+(ses.rs.length*DT/60).toFixed(1),sampleSeconds:DT,
+      readings:sample(win,90).map(r=>r.bpm),features:f})});
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(j.message||('Error '+res.status));
+    AI.bySession[ses.id]={...j,at:simNow,n:win.length};AI.calls++;AI.lastErr='';AI.lastCount[ses.id]=ses.rs.length;
+    log('IA real: concentración '+j.score+'% · '+j.level);
+    if(j.score<50&&!ses.end)evt('IA: concentración baja ('+j.score+'%)');
+    return AI.bySession[ses.id];
+  }catch(e){AI.lastErr=e.message||'No se pudo contactar con la IA';log('IA no disponible: '+AI.lastErr);return null}
+  finally{AI.busy=false;dirtyPhone=true;dirtyLink=true}
+}
+function autoAnalyze(){
+  if(!P.logged||!AI.available||AI.busy||!P.open)return;
+  const n=P.open.rs.length,last=AI.lastCount[P.open.id]||0;
+  if(n>=12&&n-last>=6)runAI(P.open,'automático');
+}
+function minuteSeries(rs){
+  if(!rs.length)return[];
+  const t0=rs[0].t,out=[];const last=Math.floor((rs[rs.length-1].t-t0)/60000);
+  for(let m=0;m<=last;m++){
+    const win=rs.filter(r=>r.t>=t0+Math.max(0,m-2)*60000&&r.t<t0+(m+1)*60000);
+    const a=analyze(win);out.push({m:m+1,score:a?a.score:null,mean:a?a.mean:null});
+  }
+  return out.filter(x=>x.score!==null);
+}
+
+function composeVerdict(a,mode,rs){
+  const hi=a&&a.mean>=98;
+  if(mode==='REST')return'Buen descanso: tu pulso baja hacia reposo. Estira el cuello, bebe agua y evita mirar pantallas.';
+  if(!a)return'Aún hay pocas lecturas. Mantén la pulsera ajustada y sigue unos minutos para analizar tu enfoque.';
+  if(a.score>=75)return'Tu pulso es estable y está en zona de foco. Mantén este ritmo y haz una pausa corta al terminar el ciclo.';
+  if(a.slope>1&&a.mean>=88)return'Tu pulso sube poco a poco: señal de tensión. Respira lento 30 s, baja los hombros y sigue con una sola tarea.';
+  if(a.spikes/a.n>.12)return'Tu pulso salta con frecuencia: posible distracción. Silencia notificaciones y retoma solo la tarea actual.';
+  if(a.slope<-1&&a.mean>=82)return'Tu pulso va bajando y te estás recuperando. Aprovecha este momento para avanzar en la tarea más importante.';
+  if(hi)return'Tu pulso está alto de forma sostenida. Haz una pausa de 2 min, respira hondo y reduce el ritmo antes de continuar.';
+  return'Tu concentración es media. Elimina una distracción cercana y fija un objetivo concreto para los próximos 10 minutos.';
+}
+function liveOK(){
+  const s=F.session;return !!(s&&s.isLive&&validBpm(s.bpm)&&simNow-s.updatedAt<=20000&&simNow-s.measuredAt<=30000);
+}
+async function requestCoach(auto,done){
+  if(P.asking)return;
+  P.asking=true;P.coachError='';dirtyPhone=true;
+  hit('n-ai');log('Celular → Motor IA: '+(AI.available?'consulta a OpenAI':'motor local (sin IA real)'));
+  const s=F.session;
+  const ses=done||P.open||(P.sessions.length?P.sessions[P.sessions.length-1]:null);
+  let ai=null;
+  if(ses)ai=await runAI(ses,done?'fin de sesión':'consejo');
+  let text,provider,model;
+  if(ai){text=ai.advice;provider='openai';model=ai.model}
+  else{
+    const rs=ses?ses.rs:[];
+    const a=analyze(done?rs:rs.slice(-36));
+    text=composeVerdict(a,done?'WORK':(s?s.currentMode:'WORK'),rs).slice(0,140);provider='local';model='motor-local';
+    if(AI.available)P.coachError='';
+  }
+  await new Promise(r=>setTimeout(r,auto?200:ai?0:700));
+  F.aiVerdict={id:'v'+Math.floor(rnd()*1e9).toString(36),verdict:text,createdAt:simNow,provider,model};
+  P.asking=false;evt('Consejo de IA generado'+(auto?' (automático)':'')+(ai?' · OpenAI':' · motor local'));
+  log('IA: consejo '+F.aiVerdict.id+' → Firebase /aiVerdict');dirtyPhone=true;dirtyLink=true;
+  // app-side del reloj lo sondea cada 10 s: en la demo llega en ~1.2 s
+  setTimeout(()=>{
+    hit('n-fb');setTimeout(()=>hit('n-zepp'),120);
+    setTimeout(()=>{hit('n-watch');
+      const v=F.aiVerdict;
+      if(v&&W.verdictId!==v.id&&simNow-v.createdAt<=300000){W.verdictId=v.id;W.advice=v.verdict;vibrate();
+        log('Reloj recibió AI_VERDICT y respondió AI_ACK');evt('Consejo recibido en el reloj');dirtyWatch=true;dirtyPhone=true}
+    },260);
+  },1100);
+}
+
+/* =====================================================================
+   RELOJ: pantallas (coordenadas de page/*.js)
+   ===================================================================== */
+const peek=(key,dir)=>{const r=key==='work'?{min:5,max:60,step:5}:{min:1,max:30,step:1};const c=Math.round((r.max-r.min)/r.step)+1;const i=Math.round((W[key]-r.min)/r.step);return r.min+((((i+dir)%c)+c)%c)*r.step};
+function wMain(){
+  const live=W.live&&validBpm(W.bpm)&&simNow-W.measuredAt<=30000;
+  const base=W.mode==='WORK'?'ENFOQUE':'DESCANSO';
+  const modeLabel=W.running?base+' · EN CURSO':(W.paused?base+' · PAUSADO':base);
+  const modeColor=W.running?C.green:(W.paused?C.amber:(W.mode==='WORK'?C.blue:C.green));
+  const total=Math.max(1,fullSecs()),ratio=clamp(1-W.secs/total,0,1);
+  const started=W.running||W.paused;
+  const fillW=started&&ratio>0?Math.max(10,Math.round(160*ratio)):10;
+  const synced=W.cloud&&simNow-W.lastAck<20000;
+  const linkText=synced?'Zepp + nube conectados':(W.ble?'Zepp conectado · sincronizando':'Sin enlace con Zepp');
+  const pulseStatus=live?(W.running?'Pulso en vivo · activo':'Pulso en vivo'):'Buscando señal…';
+  const label=W.running?'Pausar sesión':(W.paused?'Reanudar':'Iniciar');
+  return R(0,0,192,490,0,C.bg)
+   +T(12,14,168,22,'FOCUSPULSE',15,C.green)
+   +T(8,44,176,28,modeLabel,15,modeColor)
+   +`<div class="wb" data-act="toggle" style="left:6px;top:86px;width:180px;height:100px;background:transparent;font-size:58px;color:${W.running?C.green:C.white};font-weight:500;--press:transparent">${fmtMS(W.secs)}</div>`
+   +R(16,200,160,10,5,C.track)+R(16,200,fillW,10,5,started&&ratio>0?modeColor:C.track)
+   +R(10,226,172,98,22,C.card)
+   +T(12,230,168,16,'PULSO',12,C.muted)
+   +T(12,246,168,46,live?W.bpm+' BPM':'-- BPM',34,live?C.white:C.muted)
+   +T(12,294,168,24,pulseStatus,13,live?C.green:C.red)
+   +T(8,334,176,22,linkText,12,synced?C.green:C.muted)
+   +B(16,366,160,60,30,W.running?'#8f4f22':'#0c765a',W.running?'#663716':'#0a513f',label,16,C.white,'toggle')
+   +B(16,436,160,46,23,'#242e33','#39434a','Menú',14,C.white,'menu');
+}
+function wMenu(){
+  const pend=W.resetPending&&Date.now()-W.resetPending<4000;
+  return R(0,0,192,490,0,C.bg)+T(12,12,168,28,'MENÚ',17,C.green)
+   +B(16,52,160,92,30,'#243336','#38514d','Ajustes',18,C.white,'settings')
+   +B(16,152,160,92,30,'#243336','#38514d','Resumen',18,C.white,'stats')
+   +B(16,252,160,92,30,pend?'#8f3b2a':'#483126','#684331',pend?'Seguro? Toca otra vez':'Reiniciar ciclo',17,C.white,'reset')
+   +B(16,360,160,56,28,'#0c765a','#0a513f','Volver',16,C.white,'back');
+}
+function wSettings(){
+  let s=R(0,0,192,490,0,C.bg)+T(20,56,152,28,'AJUSTES',18,C.green)+R(6,196,180,116,22,C.pill);
+  const cols=[['work',8,'ENFOQUE'],['rest',100,'DESCANSO']];
+  const p2=n=>pad2(n);
+  for(const [k,x,t] of cols){
+    s+=T(x,122,84,20,t,13,C.blue)+B(x,146,84,46,23,'#243336','#38514d','▲',20,C.green,'up:'+k)
+      +T(x,198,84,26,p2(peek(k,-1)),18,C.muted)+T(x,224,84,56,p2(W[k]),40,C.white)+T(x,282,84,26,p2(peek(k,1)),18,C.muted)
+      +B(x,316,84,46,23,'#243336','#38514d','▼',20,C.green,'dn:'+k);
+  }
+  return s+T(8,364,176,16,'minutos',11,C.muted)
+   +B(24,386,144,46,23,'#0c765a','#0a513f','Listo',16,C.white,'back')
+   +B(24,438,144,46,23,'#243336','#38514d','Iniciar ahora',14,C.white,'startnow');
+}
+function wStats(){
+  return R(0,0,192,490,0,C.bg)+T(16,14,160,28,'RESUMEN',19,C.green)
+   +R(10,52,172,92,22,C.card)+T(16,58,160,22,'Sesiones completas',14,C.muted)+T(16,84,160,52,String(W.completed),40,C.white)
+   +R(10,152,172,92,22,C.card)+T(16,158,160,22,'Tiempo de enfoque',14,C.muted)+T(16,184,160,52,Math.floor(W.totalFocus/60)+' min',34,C.white)
+   +T(16,256,160,22,'CONSEJO DE IA',14,C.green)
+   +TW(16,280,160,110,W.advice||'Sin consejo todavía',14,C.white)
+   +B(24,410,144,54,27,'#0c765a','#0a513f','Volver',16,C.white,'back');
+}
+let dirtyWatch=true,dirtyPhone=true,dirtyLink=true,dirtyPanel=false,watchDown=false,phoneDown=false;
+function renderWatch(){
+  const h={main:wMain,menu:wMenu,settings:wSettings,stats:wStats}[W.screen]();
+  $('#ws').innerHTML=h;
+  $('#wcap').textContent={main:'Pantalla principal · toca el contador o desliza hacia arriba para abrir el menú',menu:'Menú · tres botones grandes, uno bajo otro',settings:'Ajustes · flechas ▲/▼ para tiempo de enfoque y descanso (sin vibración)',stats:'Resumen · sesiones, minutos y consejo de IA'}[W.screen];
+}
+function wAct(a){
+  const needsVib=['toggle','menu','settings','stats','reset','back'].includes(a)&&W.screen!=='settings';
+  if(needsVib)vibrate();
+  if(a==='toggle')toggleTimer();
+  else if(a==='menu')W.screen='menu';
+  else if(a==='settings')W.screen='settings';
+  else if(a==='stats')W.screen='stats';
+  else if(a==='back')W.screen='main';
+  else if(a==='startnow'){if(!W.running&&!W.paused)W.secs=fullSecs();W.running=true;W.paused=false;W.screen='main';sendTelemetry()}
+  else if(a==='reset'){
+    if(!W.resetPending||Date.now()-W.resetPending>4000){W.resetPending=Date.now();setTimeout(()=>{dirtyWatch=true},4100)}
+    else{W.resetPending=0;W.running=false;W.paused=false;W.mode='WORK';W.secs=W.work*60;W.screen='main';sendTelemetry()}
+  }else if(a.startsWith('up:')||a.startsWith('dn:')){
+    const k=a.slice(3),d=a[0]==='u'?-1:1;W[k]=peek(k,d);
+    const total=fullSecs();
+    if(!W.running&&!W.paused)W.secs=total;else W.secs=Math.min(W.secs,total);
+  }
+  dirtyWatch=true;
+}
+(function bindWatch(){
+  const ws=$('#ws');let down=null;
+  ws.addEventListener('pointerdown',e=>{watchDown=true;const el=e.target.closest('[data-act]');down={y:e.clientY,act:el?el.dataset.act:null};ws.setPointerCapture&&ws.setPointerCapture(e.pointerId)});
+  const up=e=>{
+    watchDown=false;if(!down)return;const dy=e.clientY-down.y;const d=down;down=null;
+    if(W.screen==='main'&&dy<-50){vibrate();W.screen='menu';dirtyWatch=true;return}
+    if(Math.abs(dy)<10&&d.act)wAct(d.act);else dirtyWatch=true;
+  };
+  ws.addEventListener('pointerup',up);ws.addEventListener('pointercancel',()=>{watchDown=false;down=null});
+})();
+
+/* =====================================================================
+   ANDROID: pantallas (src/app/*.tsx)
+   ===================================================================== */
+function pulseChart(readings){
+  const w=306,h=130;
+  if(readings.length<2)return'<div class="muted">El gráfico aparecerá después de dos lecturas reales.</div>';
+  const pts=readings.slice(-60),vals=pts.map(p=>p.bpm),min=Math.min(...vals)-8,max=Math.max(...vals)+8;
+  const first=pts[0].t,last=pts[pts.length-1].t;
+  const x=t=>8+(w-16)*(t-first)/Math.max(1,last-first),y=v=>h-12-(h-24)*(v-min)/Math.max(1,max-min);
+  const path=pts.map((p,i)=>(i?'L':'M')+' '+x(p.t).toFixed(1)+' '+y(p.bpm).toFixed(1)).join(' ');
+  const area=path+` L ${x(last)} ${h} L ${x(first)} ${h} Z`;
+  return`<div><svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <defs><linearGradient id="pulse-shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62E3AA" stop-opacity=".24"/><stop offset="1" stop-color="#62E3AA" stop-opacity="0"/></linearGradient></defs>
+    ${[h*.25,h*.5,h*.75].map(v=>`<line x1="0" x2="${w}" y1="${v}" y2="${v}" stroke="#2C4840" stroke-dasharray="3 6"/>`).join('')}
+    <path d="${area}" fill="url(#pulse-shade)"/><path d="${path}" fill="none" stroke="#62E3AA" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${x(last)}" cy="${y(pts[pts.length-1].bpm)}" r="5" fill="#62E3AA"/></svg>
+    <div style="display:flex;justify-content:space-between"><span class="muted">${min+8} BPM</span><span class="muted">${max-8} BPM</span></div></div>`;
+}
+function vLogin(){
+  return`<div class="content" style="flex:1;justify-content:center;min-height:100%">
+    <div class="eyebrow">FOCUSPULSE / ANDROID</div>
+    <div class="title">Tu ritmo.\nTu momento.</div>
+    <div class="subtitle">La información de tu Smart Band 7 en un lugar claro y tranquilo.</div>
+    <div class="card" style="margin-top:25px;gap:17px"><div class="cardTitle">Accede a tu sesión</div>
+      <div class="input">demo@focuspulse.app</div><div class="input">••••••••••</div>
+      <button class="btn" data-pact="login">Entrar</button></div>
+    <div class="muted" style="margin-top:10px">Usa la misma cuenta en los ajustes de Zepp para enlazar tu pulsera.</div></div>`;
+}
+function vResumen(){
+  const s=F.session,connected=true;
+  const live=liveOK()?s.bpm:null;
+  const transport=!!s&&simNow-s.updatedAt<=20000;
+  const status=transport?'Sincronizado con Zepp':connected?'Esperando datos del reloj':'Sin conexión con Firebase';
+  const col=transport?'var(--mint)':'var(--amber)';
+  // TimerCard
+  const elapsed=s&&s.timerRunning&&transport?Math.floor((simNow-s.updatedAt)/1000):0;
+  const remaining=Math.max(0,(s?s.secondsRemaining:0)-elapsed);
+  const mode=s&&s.currentMode==='REST'?'Descanso':'Enfoque';
+  const timerSub=transport?`${mode} · ${s.timerRunning?'en curso':s.isPaused?'en pausa':'sin iniciar'}`:'Abre FocusPulse en la pulsera';
+  const cutoff=simNow-3600000;const rd=F.readings.filter(r=>r.t>cutoff);
+  const v=F.aiVerdict;
+  const dis=P.asking||live===null;
+  return`<div class="content">
+    <div class="eyebrow">FOCUSPULSE / EN VIVO</div>
+    <div class="title">Un mejor ritmo\npara enfocarte.</div>
+    <div class="subtitle">Tu sesión y tus datos reales, sin ruido.</div>
+    <div class="status"><i style="background:${col}"></i><span class="muted" style="color:${col}">${status}</span></div>
+    ${!s?'<div class="muted" style="margin-top:4px">Abre FocusPulse en la pulsera y toca el contador para iniciar. La sesión aparecerá aquí cuando Zepp sincronice.</div>':''}
+    <div class="card" style="padding:24px;min-height:195px;justify-content:space-between;background:#143329;border-color:#3E7964">
+      <div class="cardTitle" style="color:var(--mint)">RITMO CARDÍACO</div>
+      <div style="display:flex;align-items:baseline;gap:10px"><span style="color:var(--text);font-size:80px;line-height:88px;font-weight:800;letter-spacing:-5px">${live??'--'}</span><span style="color:var(--mint);font-size:19px;font-weight:700">BPM</span></div>
+      <div class="muted" style="color:var(--text)">${live!==null?'Lectura real · '+formatAge(s.measuredAt):'Sin lectura reciente · revisa la pulsera'}</div></div>
+    <div class="rowx">
+      <div class="card"><div class="cardTitle">SESIÓN</div><div class="cardValue">${transport?fmtMS(remaining):'--:--'}</div><div class="muted">${timerSub}</div></div>
+      <div class="card"><div class="cardTitle">COMPLETADAS</div><div class="cardValue">${transport?s.completedSessions:'--'}</div><div class="muted">${transport?Math.floor(s.totalFocusSeconds/60)+' min de enfoque':'Aún sin sincronizar'}</div></div>
+    </div>
+    <div class="card"><div class="cardTitle">PULSO · ÚLTIMA HORA</div>${pulseChart(rd)}<div class="muted">Solo lecturas enviadas por el sensor físico.</div></div>
+    <div class="card" style="background:#182B25"><div class="cardTitle" style="color:var(--mint)">FOCUS COACH</div>
+      <div class="body" style="font-size:18px;font-weight:700;line-height:26px">${E(v?v.verdict:'Cuando haya una lectura reciente, pide una sugerencia breve para tu sesión.')}</div>
+      <div class="muted">${v?'Generado '+formatAge(v.createdAt)+' · '+(v.provider==='openai'?'OpenAI '+v.model:'motor local'):'Se enviarán tus métricas recientes solo cuando lo solicites.'}</div>
+      <button class="btn" data-pact="coach" style="margin-top:6px" ${dis?'disabled':''}>${P.asking?'<span class="spin"></span>':'Pedir un consejo'}</button></div>
+    <div class="muted">El pulso por sí solo no indica estrés ni reemplaza una evaluación médica.</div></div>`;
+}
+function vConexion(){
+  const s=F.session;
+  const steps=[['01','Instala la app de la pulsera','Desde el modo desarrollador de Zepp, instala el paquete FocusPulse .zab en tu Smart Band 7.'],
+   ['02','Vincula Firebase en Zepp','Abre los ajustes de FocusPulse dentro de Zepp e introduce la URL de Realtime Database, la Web API key y esta misma cuenta.'],
+   ['03','Inicia la sesión en la pulsera','Abre FocusPulse en la Band 7 y toca el contador. La app móvil mostrará la sesión cuando Zepp sincronice; el pulso requiere llevar puesta la pulsera.']];
+  return`<div class="content"><div class="eyebrow">CONFIGURACIÓN / ENLACE</div><div class="title">Todo en su lugar.</div>
+    <div class="subtitle">El reloj habla con Zepp; la nube conecta Zepp con esta app.</div>
+    <div class="card"><div class="cardTitle">ESTADO ACTUAL</div><div class="body" style="font-weight:700">Firebase conectado</div>
+      <div class="muted">${s?'Se recibieron datos de la pulsera.':'Todavía no se han recibido datos de la pulsera.'}</div><div class="muted">Proyecto Firebase configurado</div></div>
+    ${steps.map(([n,t,b])=>`<div class="card"><div style="color:var(--mint);font-size:13px;font-weight:800;letter-spacing:2px">${n}</div><div class="body" style="font-size:18px;font-weight:700">${t}</div><div class="muted">${b}</div></div>`).join('')}
+    <div class="card"><div class="cardTitle">TU CUENTA</div><div class="body">demo@focuspulse.app</div><button class="outline" data-pact="logout">Cerrar sesión</button></div></div>`;
+}
+function gauge(score){
+  const r=74,c=2*Math.PI*r,p=score==null?0:score/100;
+  const col=score==null?'#2C4840':(score>=75?'#62E3AA':score>=50?'#FFD89A':'#FFB6A9');
+  return`<svg width="190" height="190" viewBox="0 0 190 190"><circle cx="95" cy="95" r="${r}" fill="none" stroke="#1c2e29" stroke-width="16"/>
+   <circle cx="95" cy="95" r="${r}" fill="none" stroke="${col}" stroke-width="16" stroke-linecap="round" stroke-dasharray="${(c*p).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 95 95)"/>
+   <text x="95" y="104" text-anchor="middle" fill="#F2FFF8" font-size="52" font-weight="800" font-family="Roboto,Segoe UI,Arial" letter-spacing="-2">${score==null?'--':score}</text>
+   <text x="95" y="128" text-anchor="middle" fill="#A9C5B9" font-size="13" font-weight="700" font-family="Roboto,Segoe UI,Arial" letter-spacing="1.5">${score==null?'SIN DATOS':'DE 100'}</text></svg>`;
+}
+function vAnalisis(){
+  const cur=P.open,lastS=P.sessions.length?P.sessions[P.sessions.length-1]:null;
+  const ref=cur||lastS;
+  const win=ref?ref.rs.slice(-36):[];
+  const a=analyze(win);
+  const ai=ref?AI.bySession[ref.id]:null;           // análisis de la IA real (si existe)
+  const score=ai?ai.score:(a?a.score:null);
+  const level=score==null?null:(score>=75?'Alta':score>=50?'Media':'Baja');
+  const badge=AI.busy?'<span class="pill p-mid" style="min-width:0">Analizando con IA…</span>'
+    :AI.available?`<span class="pill p-hi" style="min-width:0">IA real activa · ${E(AI.model)}</span>`
+    :`<span class="pill p-lo" style="min-width:0">Motor local · ${E(AI.lastErr||'IA no disponible')}</span>`;
+  const mins=ref?minuteSeries(ref.rs):[];
+  const bars=mins.slice(-25);
+  const bw=bars.length?Math.min(14,Math.floor(300/bars.length)-2):10;
+  const chart=bars.length?`<svg width="306" height="104" viewBox="0 0 306 104">${[26,52,78].map(y=>`<line x1="0" x2="306" y1="${y}" y2="${y}" stroke="#2C4840" stroke-dasharray="3 6"/>`).join('')}
+    ${bars.map((b,i)=>{const h=Math.max(3,b.score*.9);const x=4+i*(bw+2);const c=b.score>=75?'#62E3AA':b.score>=50?'#FFD89A':'#FFB6A9';return`<rect x="${x}" y="${96-h}" width="${bw}" height="${h}" rx="3" fill="${c}"/>`}).join('')}</svg>
+    <div style="display:flex;justify-content:space-between"><span class="muted">min 1</span><span class="muted">min ${bars[bars.length-1].m}</span></div>`:'<div class="muted">Se mostrará tras el primer minuto de lecturas.</div>';
+  const stats=P.sessions.map(s=>({s,a:analyze(s.rs),ai:AI.bySession[s.id]}));
+  const sessionsTbl=stats.length?`<table class="t"><thead><tr><th>#</th><th>Inicio</th><th>Dur</th><th>Mín</th><th>Prom</th><th>Máx</th><th>±</th><th style="text-align:center">Conc.</th></tr></thead><tbody>
+   ${stats.slice(-8).map(({s,a,ai})=>{const sc=ai?ai.score:(a?a.score:null);const dur=s.rs.length?Math.max(1,Math.round(s.rs.length*DT/60)):0;return`<tr><td>${s.id}</td><td>${clockHM(s.start)}</td><td>${dur} m</td><td>${a?a.min:'--'}</td><td>${a?Math.round(a.mean):'--'}</td><td>${a?a.max:'--'}</td><td>${a?a.sd.toFixed(1):'--'}</td>
+   <td style="text-align:center">${sc!=null?`<span class="pill ${lvlClass(sc)}">${sc}%${ai?'':'*'}</span>`:'--'}</td></tr>`}).join('')}</tbody></table>
+   <div class="muted" style="font-size:11.5px;line-height:17px">Lecturas cada 5 s · Dur en minutos · ± = desviación estándar (lpm). Conc.: IA real${stats.some(x=>!x.ai)?'; * = estimado local, aún sin análisis de la IA':''}.</div>
+   ${AI.available&&stats.some(x=>!x.ai&&x.s.end)?`<button class="outline" data-pact="analyzeall" style="min-height:44px;font-size:14px" ${AI.busy?'disabled':''}>Analizar sesiones con IA</button>`:''}`:'<div class="muted">Aún no hay sesiones. Inicia una sesión de enfoque en la pulsera.</div>';
+  const all=[];P.sessions.forEach(s=>all.push(...s.rs));
+  const zones=ZONES.map(z=>({...z,n:all.filter(r=>r.bpm>=z.lo&&r.bpm<z.hi).length}));
+  const tot=Math.max(1,all.length);
+  const zonesTbl=`<table class="t"><thead><tr><th>Zona</th><th>Rango</th><th>Min</th><th style="text-align:right;width:92px">%</th></tr></thead><tbody>
+   ${zones.map(z=>`<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${z.c};margin-right:7px"></span>${z.k}</td><td>${z.lo===0?'<68':z.hi===999?'≥98':z.lo+'–'+(z.hi-1)}</td><td>${(z.n*DT/60).toFixed(1)}</td>
+   <td><div style="display:flex;align-items:center;gap:7px;justify-content:flex-end"><div class="bar" style="width:44px;min-width:44px"><i style="width:${(z.n/tot*100).toFixed(0)}%;background:${z.c}"></i></div><span style="width:30px;text-align:right">${Math.round(z.n/tot*100)}%</span></div></td></tr>`).join('')}</tbody></table>`;
+  const factors=a?[['Estabilidad del pulso','35%',a.stab],['Tiempo en zona de foco','30%',a.zone],['Tendencia del pulso','20%',a.trend],['Ausencia de picos','15%',a.spike]]:[];
+  const factorsHtml=a?`<div style="display:flex;flex-direction:column;gap:11px">${factors.map(([n,w,v])=>`<div class="factor"><span>${n} <span class="muted" style="font-size:11.5px">· peso ${w}</span></span><b style="color:${lvlColor(v)}">${Math.round(v)}</b><div class="bar"><i style="width:${Math.round(v)}%;background:${lvlColor(v)}"></i></div></div>`).join('')}</div>
+   <div class="muted" style="font-size:11.5px;line-height:17px">Pulso medio ${Math.round(a.mean)} lpm · ±${a.sd.toFixed(1)} · tendencia ${a.slope>=0?'+':''}${a.slope.toFixed(1)} lpm/min · ${a.spikes} picos en ${a.n} lecturas.</div>`:'<div class="muted">El modelo necesita al menos 3 lecturas de una sesión de enfoque.</div>';
+  const ev=P.events.slice(0,7);
+  const evHtml=ev.length?`<div class="evt">${ev.map(e=>`<span>${clockHMS(e.t)}</span><div>${E(e.x)}</div>`).join('')}</div>`:'<div class="muted">Sin eventos todavía.</div>';
+  const scored=stats.filter(x=>x.a||x.ai);const mean=scored.length?Math.round(scored.reduce((q,x)=>q+(x.ai?x.ai.score:x.a.score),0)/scored.length):null;
+  return`<div class="content">
+    <div class="eyebrow">FOCUSPULSE / ANÁLISIS IA</div>
+    <div class="title">Tu nivel de\nconcentración.</div>
+    <div class="subtitle">La IA analiza el pulso que envía tu pulsera y estima cuánto te concentras en cada sesión.</div>
+    <div class="card" style="padding:22px;background:#143329;border-color:#3E7964;align-items:center">
+      <div class="cardTitle" style="color:var(--mint);align-self:flex-start">${cur?'CONCENTRACIÓN · AHORA':'CONCENTRACIÓN · ÚLTIMA SESIÓN'}</div>
+      ${gauge(score)}
+      <div style="font-size:22px;font-weight:800;color:${score!=null?lvlColor(score):'var(--muted)'}">${score!=null?'Concentración '+level.toLowerCase():'Esperando datos'}</div>
+      <div class="muted" style="text-align:center;color:var(--text)">${score!=null?`${ai?'Estimado por la IA ('+E(ai.model)+') · ':'Estimado por el motor local · '}${ai?ai.n:a.n} lecturas de la sesión ${ref.id}${ai?' · '+formatAge(ai.at):''}`:'Inicia una sesión de enfoque en la pulsera.'}</div>
+      <div style="margin-top:2px">${badge}</div>
+      ${mean!==null?`<div class="muted" style="text-align:center">Promedio de ${scored.length} sesiones: <b style="color:${lvlColor(mean)}">${mean}%</b></div>`:''}</div>
+    <div class="card"><div class="cardTitle">CONCENTRACIÓN POR MINUTO</div>${chart}</div>
+    ${ai?`<div class="card" style="background:#182B25"><div class="cardTitle" style="color:var(--mint)">ANÁLISIS DE LA IA</div>
+      <div class="body" style="line-height:22px">${E(ai.summary)}</div>
+      <div style="display:flex;flex-direction:column;gap:11px;margin-top:4px">${ai.factors.map(f=>`<div class="factor"><span>${E(f.name)}</span><b style="color:${lvlColor(f.score)}">${f.score}</b><div class="bar"><i style="width:${f.score}%;background:${lvlColor(f.score)}"></i></div><div class="muted" style="grid-column:1/3;font-size:12px;line-height:16px;margin-top:-1px">${E(f.note)}</div></div>`).join('')}</div>
+      <div class="muted" style="font-size:11.5px">Generado por ${E(ai.model)}${a?' · lo que ve el modelo: '+Math.round(a.mean)+' lpm medios, ±'+a.sd.toFixed(1)+', '+a.spikes+' picos':''}</div></div>`:''}
+    <div class="card"><div class="cardTitle">${ai?'MÉTRICAS QUE ENVÍA EL CELULAR A LA IA':'CÓMO CALCULA EL MOTOR LOCAL'}</div>${factorsHtml}
+      ${AI.available?`<button class="btn" data-pact="analyze" style="min-height:46px;font-size:14px;margin-top:4px" ${AI.busy||!ref?'disabled':''}>${AI.busy?'<span class="spin"></span>':'Analizar con IA ahora'}</button>`:''}</div>
+    <div class="card"><div class="cardTitle">ESTADÍSTICAS POR SESIÓN</div>${sessionsTbl}</div>
+    <div class="card"><div class="cardTitle">ZONAS DE PULSO</div>${zonesTbl}</div>
+    <div class="card" style="background:#182B25"><div class="cardTitle" style="color:var(--mint)">FOCUS COACH</div>
+      <div class="body" style="font-weight:700;line-height:23px">${E(F.aiVerdict?F.aiVerdict.verdict:'Aún sin consejo. Pídelo desde Resumen.')}</div>
+      ${F.aiVerdict?`<div class="muted">${F.aiVerdict.provider==='openai'?'OpenAI '+E(F.aiVerdict.model):'Motor local (sin IA real)'}</div>`:''}</div>
+    <div class="card"><div class="cardTitle">REGISTRO DE EVENTOS</div>${evHtml}</div>
+    <div class="muted">Estimación de demostración basada solo en el pulso simulado. No mide concentración de forma clínica ni reemplaza una evaluación médica.</div></div>`;
+}
+let lastTab=null;const scrollPos={};
+function renderPhone(){
+  const el=$('#ps');
+  const pc=$('.pcontent',el);if(pc)scrollPos[lastTab||'x']=pc.scrollTop;
+  const tab=P.logged?P.tab:'login';
+  const body=tab==='login'?vLogin():tab==='resumen'?vResumen():tab==='conexion'?vConexion():vAnalisis();
+  const tabs=P.logged?`<div class="tabs">${[['resumen','Resumen'],['conexion','Conexión'],['analisis','Análisis']].map(([k,n])=>`<div class="tab ${P.tab===k?'on':''}" data-ptab="${k}"><i></i>${n}</div>`).join('')}</div>`:'';
+  el.innerHTML=`<div class="sbar"><span>${clockHM(simNow)}</span><span style="opacity:.85">◥ 5G ▮▮▮</span></div><div class="cam"></div><div class="pcontent">${body}</div>${tabs}<div class="navbar"><i></i></div>`;
+  const nc=$('.pcontent',el);if(nc&&scrollPos[tab]!=null)nc.scrollTop=scrollPos[tab];
+  lastTab=tab;
+}
+(function bindPhone(){
+  const ps=$('#ps');
+  ps.addEventListener('pointerdown',()=>{phoneDown=true});
+  const rel=()=>{setTimeout(()=>{phoneDown=false;dirtyPhone=true},60)};
+  ps.addEventListener('pointerup',rel);ps.addEventListener('pointercancel',rel);
+  ps.addEventListener('click',e=>{
+    const t=e.target.closest('[data-ptab]');if(t){const pc=$('.pcontent',ps);if(pc)scrollPos[lastTab]=pc.scrollTop;P.tab=t.dataset.ptab;dirtyPhone=true;return}
+    const a=e.target.closest('[data-pact]');if(!a||a.disabled)return;
+    const k=a.dataset.pact;
+    if(k==='login'){P.logged=true;P.tab='resumen';log('Celular: sesión iniciada en Firebase');dirtyPhone=true}
+    else if(k==='logout'){P.logged=false;dirtyPhone=true}
+    else if(k==='coach'){requestCoach(false)}
+    else if(k==='analyze'){const ses=P.open||P.sessions[P.sessions.length-1];if(ses)runAI(ses,'manual')}
+    else if(k==='analyzeall'){(async()=>{for(const ses of P.sessions.filter(x=>x.end&&!AI.bySession[x.id])){while(AI.busy)await new Promise(r=>setTimeout(r,300));await runAI(ses,'historial')}})()}
+  });
+})();
+
+/* =====================================================================
+   PANEL DE SIMULACIÓN + ENLACE
+   ===================================================================== */
+function renderPanel(){
+  const el=$('#panel');
+  el.innerHTML=`
+   <div><h3>1 · ESCENARIO DE DATOS SIMULADOS</h3><div class="chips" id="scn">
+     ${Object.entries(SCENARIOS).map(([k,s])=>`<div class="chip ${SIM.scenario===k?'on':''}" data-scn="${k}">${s.name}<small>${s.sub}</small></div>`).join('')}</div></div>
+   <div><h3>2 · DATOS PARA EL RELOJ</h3>
+     <div class="chips" id="src">
+       ${[['scenario','Escenario'],['manual','Manual'],['series','Serie pegada']].map(([k,n])=>`<div class="chip ${SIM.source===k?'on':''}" data-src="${k}">${n}</div>`).join('')}</div>
+     <label class="switch" style="margin:9px 0 6px"><span>Sensor entregando datos</span><input type="checkbox" id="sens" ${SIM.sensor?'checked':''}></label>
+     <div style="display:flex;align-items:center;gap:9px"><input type="range" id="bpm" min="40" max="180" value="${SIM.manualBpm}" style="flex:1;accent-color:#62E3AA"><b id="bpmv" style="width:62px;text-align:right">${SIM.manualBpm} lpm</b></div>
+     <div class="row" style="margin-top:7px"><button class="btnp alt" id="sendbpm">Enviar al reloj</button><label class="switch" style="flex:1"><span>±1 natural</span><input type="checkbox" id="noise" ${SIM.manualNoise?'checked':''}></label></div>
+     <textarea id="series" placeholder="Pega o escribe lpm separados por coma, espacio o salto de línea. Ej: 72 74 73 90 95 88 76" style="width:100%;height:64px;margin-top:8px;background:#0d1916;color:var(--text);border:1px solid #2c4840;border-radius:12px;padding:8px;font:12px Consolas,monospace;resize:none">${E(SIM.seriesText||'')}</textarea>
+     <button class="btnp alt" id="playseries" style="margin-top:6px">Reproducir serie (1 dato por segundo simulado)</button>
+     <div class="note" style="margin-top:6px">Valores 25–240 lpm. El reloj los muestra y los envía al celular como si el sensor los midiera.</div></div>
+   <div><h3>3 · VELOCIDAD DE LA SIMULACIÓN</h3><div class="chips" id="spd">
+     ${[1,5,20,60].map(v=>`<div class="chip ${SIM.speed===v?'on':''}" data-spd="${v}">${v}×</div>`).join('')}</div>
+     <div class="note" style="margin-top:6px">A 20× un ciclo de 5 min dura 15 s reales.</div></div>
+   <div><h3>4 · POMODORO</h3>
+     <div class="row"><button class="btnp" id="start">${W.running?'Pausar sesión':'Iniciar sesión'}</button><button class="btnp alt" id="quick">Modo rápido 5/1</button></div>
+     <label class="switch" style="margin-top:9px"><span>Continuar ciclo automáticamente</span><input type="checkbox" id="auto" ${SIM.autoNext?'checked':''}></label>
+     <div class="note" style="margin-top:4px">El reloj real se detiene al terminar cada ciclo; actívalo solo si quieres que la demo no se detenga.</div></div>
+   <div><h3>5 · IA EN EL CELULAR</h3>
+     <button class="btnp alt" id="loadhist">Precargar historial (4 sesiones)</button>
+     <div class="row" style="margin-top:8px"><button class="btnp alt" id="coach">Pedir consejo</button><button class="btnp alt" id="csv">Exportar CSV</button></div></div>
+   <div style="margin-top:auto"><h3>ESTADO</h3><div class="kv" id="kv"></div>
+     <button class="btnp alt" id="reset" style="margin-top:12px">Reiniciar demostración</button></div>`;
+  $('#scn').onclick=e=>{const c=e.target.closest('[data-scn]');if(!c)return;SIM.scenario=c.dataset.scn;SIM.gen=makeGen(SIM.scenario);SIM.source='scenario';log('Escenario: '+SCENARIOS[SIM.scenario].name);renderPanel()};
+  $('#src').onclick=e=>{const c=e.target.closest('[data-src]');if(!c)return;SIM.source=c.dataset.src;if(SIM.source==='series'&&!SIM.series.length)parseSeries();log('Fuente de datos: '+c.textContent);renderPanel()};
+  $('#bpm').oninput=e=>{SIM.manualBpm=+e.target.value;$('#bpmv').textContent=SIM.manualBpm+' lpm'};
+  $('#noise').onchange=e=>{SIM.manualNoise=e.target.checked};
+  $('#sendbpm').onclick=()=>{SIM.source='manual';SIM.sensor=true;W.bpm=SIM.manualBpm;W.live=true;W.measuredAt=simNow;log('Manual: '+SIM.manualBpm+' lpm enviado al reloj');dirtyWatch=true;sendTelemetry();renderPanel()};
+  $('#playseries').onclick=()=>{parseSeries();if(!SIM.series.length){log('Serie vacía o con valores fuera de 25–240');return}SIM.sensor=true;SIM.source='series';SIM.seriesIdx=0;log('Serie de '+SIM.series.length+' valores en reproducción');renderPanel()};
+  $('#spd').onclick=e=>{const c=e.target.closest('[data-spd]');if(!c)return;SIM.speed=+c.dataset.spd;startLoop();renderPanel()};
+  $('#sens').onchange=e=>{SIM.sensor=e.target.checked;log(SIM.sensor?'Sensor simulado activado':'Sensor simulado desactivado');evt(SIM.sensor?'Sensor activado':'Sensor desactivado');};
+  $('#auto').onchange=e=>{SIM.autoNext=e.target.checked};
+  $('#start').onclick=()=>{vibrate();W.screen='main';toggleTimer();renderPanel()};
+  $('#quick').onclick=()=>{W.work=5;W.rest=1;if(!W.running&&!W.paused)W.secs=fullSecs();dirtyWatch=true;log('Duraciones: enfoque 5 min · descanso 1 min')};
+  $('#coach').onclick=()=>{if(!P.logged)return;requestCoach(false)};
+  $('#loadhist').onclick=loadHistory;
+  $('#csv').onclick=exportCsv;
+  $('#reset').onclick=()=>location.reload();
+}
+function parseSeries(){
+  const t=($('#series')||{}).value||SIM.seriesText||'';SIM.seriesText=t;
+  SIM.series=t.split(/[\s,;]+/).map(Number).filter(n=>Number.isInteger(n)&&n>=25&&n<=240);SIM.seriesIdx=0;
+}
+function updateKv(){
+  const kv=$('#kv');if(!kv)return;
+  kv.innerHTML=`<span>Fuente</span><b>${{scenario:'Escenario',manual:'Manual',series:'Serie '+SIM.seriesIdx+'/'+SIM.series.length}[SIM.source]}</b><span>IA</span><b style="color:${AI.available?'#62E3AA':'#FFD89A'}">${AI.available?'OpenAI activa ('+AI.calls+')':'motor local'}</b><span>Hora simulada</span><b>${clockHMS(simNow)}</b><span>BPM entregado</span><b>${W.live?W.bpm:'--'}</b><span>Lecturas en Firebase</span><b>${F.readings.length}</b><span>Sesiones analizadas</span><b>${P.sessions.length}</b>`;
+  const b=$('#start');if(b)b.textContent=W.running?'Pausar sesión':(W.paused?'Reanudar sesión':'Iniciar sesión');
+}
+function renderLink(){
+  const el=$('#link');
+  if(!el.dataset.built){
+    el.dataset.built='1';
+    el.innerHTML=`
+     <div class="node" id="n-watch"><i class="dot"></i><div><b>Smart Band 7</b><span>hmBle · TELEMETRY_PING cada 5 s</span></div></div><div class="arrow">▼</div>
+     <div class="node" id="n-zepp"><i class="dot"></i><div><b>Zepp (teléfono)</b><span>app-side · messaging.peerSocket</span></div></div><div class="arrow">▼</div>
+     <div class="node" id="n-fb"><i class="dot"></i><div><b>Firebase Realtime DB</b><span>users/{uid}/devices/band7</span></div></div><div class="arrow">▼</div>
+     <div class="node" id="n-phone"><i class="dot"></i><div><b>App Android</b><span>onValue → Resumen / Análisis</span></div></div>
+     <div class="node ai" id="n-ai"><i class="dot"></i><div><b>Motor de IA</b><span id="aiNodeTxt">concentración · tablas · consejo</span></div></div>
+     <div class="note" style="margin-top:2px">Último paquete enviado por el reloj</div>
+     <div class="pre" id="pkt"></div>
+     <div class="note">Registro</div><div class="log" id="log"></div>`;
+  }
+  $('#aiNodeTxt').textContent=AI.available?'OpenAI '+AI.model+' · activa':(AI.checked?'motor local · '+AI.lastErr:'comprobando…');
+  $('#pkt').textContent=lastPacket?JSON.stringify(lastPacket,null,1).replace(/\n\s*/g,' ').replace(/, /g,',\n'):'(esperando primer paquete…)';
+  $('#log').innerHTML=LOG.slice(0,12).map(l=>`<div><i>${clockHMS(l.t)}</i>${E(l.x)}</div>`).join('');
+}
+
+function loadHistory(){
+  if(P.sessions.some(s=>s.hist))return;
+  const plan=[['calm',7*60+45],['distracted',8*60+25],['stress',9*60+0],['recovery',9*60+35]];
+  let id=P.sessions.length;
+  for(const [key,min] of plan){
+    id++;const start=new Date(2026,10,11,Math.floor(min/60),min%60,0).getTime();
+    const gen=makeGen(key,1000+id*7);const rs=[];
+    for(let i=0;i<300;i++){let b=0;for(let k=0;k<5;k++)b=gen.next(false);rs.push({t:start+i*5000,bpm:b})}
+    P.sessions.splice(id-1,0,{id,start,end:start+25*60000,status:'Completada',rs,work:25,hist:true});
+  }
+  // renumerar por hora de inicio
+  P.sessions.sort((a,b)=>a.start-b.start).forEach((s,i)=>s.id=i+1);
+  W.completed+=4;W.totalFocus+=4*25*60;
+  evt('Historial de ejemplo cargado (4 sesiones)');log('Historial simulado cargado en el celular');
+  dirtyPhone=true;dirtyWatch=true;
+}
+function exportCsv(){
+  const rows=['sesion,hora,bpm'];
+  P.sessions.forEach(s=>s.rs.forEach(r=>rows.push(s.id+','+clockHMS(r.t)+','+r.bpm)));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));a.download='focuspulse-lecturas.csv';a.click();
+}
+
+/* =====================================================================
+   BUCLE DE SIMULACIÓN (1 s simulado por tick)
+   ===================================================================== */
+function simTick(){
+  simNow+=1000;
+  if(SIM.sensor){
+    let bpm=null;
+    if(SIM.source==='manual'){bpm=clamp(Math.round(SIM.manualBpm+(SIM.manualNoise?gauss()*0.9:0)),25,240)}
+    else if(SIM.source==='series'){
+      if(SIM.seriesIdx<SIM.series.length){bpm=SIM.series[SIM.seriesIdx++];SIM.manualBpm=bpm}
+      else{SIM.source='manual';log('Serie terminada: se mantiene '+SIM.manualBpm+' lpm');dirtyPanel=true;bpm=SIM.manualBpm}
+    }else bpm=SIM.gen.next(W.mode==='REST');
+    W.bpm=bpm;W.live=true;W.measuredAt=simNow;
+  }
+  watchTick();
+  if(W.screen==='main'||W.screen==='stats')dirtyWatch=true;
+  dirtyPhone=true;
+}
+function startLoop(){
+  if(SIM.timer)clearInterval(SIM.timer);
+  SIM.timer=setInterval(simTick,Math.max(8,1000/SIM.speed));
+}
+function frame(){
+  if(dirtyWatch&&!watchDown){dirtyWatch=false;renderWatch()}
+  if(dirtyPhone&&!phoneDown){dirtyPhone=false;renderPhone()}
+  if(dirtyLink){dirtyLink=false;renderLink()}
+  if(dirtyPanel){dirtyPanel=false;renderPanel()}
+  updateKv();
+  setTimeout(frame,120);
+}
+
+/* ---------- escala de la escena ---------- */
+function fit(){
+  const st=$('#stage');const s=Math.min(innerWidth/1500,innerHeight/960);
+  st.style.transform='scale('+s+')';st.style.marginLeft='0';
+  $('#viewport').style.alignItems='flex-start';
+  st.style.position='absolute';st.style.left=Math.max(0,(innerWidth-1500*s)/2)+'px';st.style.transformOrigin='top left';
+}
+addEventListener('resize',fit);
+
+renderPanel();renderLink();renderWatch();renderPhone();fit();startLoop();frame();checkAI();setInterval(autoAnalyze,15000);
+// utilidades para verificación
+window.__fp={W,F,P,SIM,analyze,composeVerdict,get simNow(){return simNow},wAct,requestCoach,loadHistory,ZONES};
+</script>
+</body>
+</html>
