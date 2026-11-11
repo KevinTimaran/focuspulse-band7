@@ -29,6 +29,7 @@
         "page": {
           "pages": [
             "page/index",
+            "page/menu",
             "page/settings",
             "page/stats"
           ]

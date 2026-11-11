@@ -163,5 +163,25 @@ test('auth and config errors display "Configura cuenta en Zepp" on linkWidget',(
 
   h.page.onDestroy();
 });
-
-
+test('menu page: three large stacked buttons; reset needs two taps and keeps counters',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'../page/menu.js'),'utf8');
+  let page;const widgets=[],pages=[];
+  const state={workDuration:25,restDuration:5,currentMode:'REST',secondsRemaining:40,timerRunning:true,isPaused:false,completedSessions:3,totalFocusSeconds:4500};
+  vm.runInNewContext(src,{Page:p=>page=p,getApp:()=>({globalData:state}),Date,
+    hmSensor:{id:{VIBRATE:1},createSensor:()=>({stop(){},start(){}}),deleteSensor(){}},
+    hmUI:{widget:{TEXT:1,BUTTON:3},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},
+      createWidget(kind,props){const w={kind,props,setProperty(_k,v){Object.assign(props,v);}};widgets.push(w);return w;}},
+    hmApp:{gotoPage(o){pages.push(o.url);},goBack(){}}});
+  page.build();
+  const big=['Ajustes','Resumen','Reiniciar ciclo'].map(t=>widgets.find(w=>w.props.text===t));
+  for(const w of big){assert.ok(w&&w.props.h>=80&&w.props.x+w.props.w<=192&&w.props.y+w.props.h<=490);}
+  assert.ok(big[0].props.y+big[0].props.h<=big[1].props.y&&big[1].props.y+big[1].props.h<=big[2].props.y,'one below the other');
+  big[0].props.click_func();assert.deepEqual(pages,['page/settings']);
+  page.onDestroy();page.build();
+  const reset=widgets.filter(w=>w.props.text==='Reiniciar ciclo').pop();
+  reset.props.click_func();assert.equal(state.timerRunning,true);assert.equal(reset.props.text,'Seguro? Toca otra vez');
+  reset.props.click_func();
+  assert.equal(state.timerRunning,false);assert.equal(state.currentMode,'WORK');assert.equal(state.secondsRemaining,1500);
+  assert.equal(state.completedSessions,3);assert.equal(state.totalFocusSeconds,4500);
+  page.onDestroy();
+});
