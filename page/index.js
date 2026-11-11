@@ -352,9 +352,11 @@ function tick(fromTimer) {
   }
   if (state.timerRunning && fromTimer !== false) {
     const delta = state.lastTimestamp > 0 ? now - state.lastTimestamp : 1000;
-    const step = delta >= 2000 && delta <= 3600000 ? Math.floor(delta / 1000) : 1;
+    const catchUp = state.lastTimestamp > 0 && delta >= 1000 && delta <= 3600000;
+    const step = catchUp ? Math.floor(delta / 1000) : 1;
     state.secondsRemaining = Math.max(0, state.secondsRemaining - step);
-    state.lastTimestamp = now;
+    // Keep the sub-second remainder so timer jitter does not accumulate as drift.
+    state.lastTimestamp = catchUp ? state.lastTimestamp + step * 1000 : now;
     if (state.secondsRemaining === 0) {
       complete();
       return;
