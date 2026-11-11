@@ -36,9 +36,21 @@ let bpmWidget = null;
 let statusWidget = null;
 let timerWidget = null;
 let linkWidget = null;
-let adviceWidget = null;
 let actionWidget = null;
-let progressDots = [];
+let progressFill = null;
+let gestureOn = false;
+
+const BAR_X = 16;
+const BAR_Y = 200;
+const BAR_W = 160;
+const wrapStyle = () => (hmUI.text_style.WRAP !== undefined ? hmUI.text_style.WRAP : hmUI.text_style.NONE);
+
+function card(x, y, w, h, color) {
+  if (typeof hmUI === 'undefined' || !hmUI.widget || hmUI.widget.FILL_RECT === undefined) return null;
+  try {
+    return hmUI.createWidget(hmUI.widget.FILL_RECT, { x, y, w, h, radius: 22, color });
+  } catch (_e) { return null; }
+}
 
 function gd() {
   const app = typeof getApp === 'function' ? getApp() : null;
@@ -82,7 +94,7 @@ function setText(widget, value, color) {
 function actionBtnProps(s) {
   const label = s.timerRunning ? 'Pausar sesión' : (s.isPaused ? 'Reanudar' : 'Iniciar');
   return {
-    x: 20, y: 242, w: 152, h: 50, radius: 25,
+    x: 16, y: 366, w: 160, h: 60, radius: 30,
     normal_color: s.timerRunning ? 0x8f4f22 : 0x0c765a,
     press_color: s.timerRunning ? 0x663716 : 0x0a513f,
     text: label,
@@ -308,17 +320,15 @@ function render() {
 
   const total = Math.max(1, (s.currentMode === 'WORK' ? s.workDuration : s.restDuration) * 60);
   const ratio = Math.max(0, Math.min(1, 1 - s.secondsRemaining / total));
-  const activeStage = s.timerRunning || s.isPaused ? Math.min(3, Math.floor(ratio * 4)) : -1;
-  for (let i = 0; i < progressDots.length; i += 1) {
-    const dot = progressDots[i];
-    if (dot && typeof dot.setProperty === 'function' && hmUI.prop && hmUI.prop.MORE !== undefined) {
-      try {
-        dot.setProperty(hmUI.prop.MORE, {
-          x: 36 + i * 36, y: 172, w: 12, h: 12, radius: 6,
-          color: i <= activeStage ? modeColor : C.track,
-        });
-      } catch (_e) {}
-    }
+  if (progressFill && typeof progressFill.setProperty === 'function' && hmUI.prop && hmUI.prop.MORE !== undefined) {
+    const started = s.timerRunning || s.isPaused;
+    const fillW = started && ratio > 0 ? Math.max(10, Math.round(BAR_W * ratio)) : 10;
+    try {
+      progressFill.setProperty(hmUI.prop.MORE, {
+        x: BAR_X, y: BAR_Y, w: fillW, h: 10, radius: 5,
+        color: started && ratio > 0 ? modeColor : C.track,
+      });
+    } catch (_e) {}
   }
 
   const synced = s.cloudSynced && Date.now() - s.lastAckAt < 20000;
@@ -327,7 +337,6 @@ function render() {
     ? 'Zepp + nube conectados'
     : (s.bleConnected ? (isAccountError ? 'Configura cuenta en Zepp' : 'Zepp conectado · sincronizando') : 'Sin enlace con Zepp');
   setText(linkWidget, linkText, synced ? C.green : (s.bleConnected && isAccountError ? C.amber : C.muted));
-  setText(adviceWidget, s.aiRecommendation ? ('Consejo: ' + s.aiRecommendation).slice(0, 40) : 'Consejo: pendiente de datos', C.muted);
 }
 
 function tick(fromTimer) {
@@ -392,9 +401,12 @@ function cleanup() {
   statusWidget = null;
   timerWidget = null;
   linkWidget = null;
-  adviceWidget = null;
   actionWidget = null;
-  progressDots = [];
+  progressFill = null;
+  if (gestureOn) {
+    gestureOn = false;
+    try { hmApp.unregisterGestureEvent(); } catch (_e) {}
+  }
 }
 
 function openPage(url) {
@@ -416,7 +428,7 @@ Page({
     wearSeenActive = false;
     ticks = 0;
     consecutiveSendFailures = 0;
-    progressDots = [];
+    progressFill = null;
     state.lastBpm = null;
     state.isLiveHeartRate = false;
     state.measuredAt = 0;
@@ -432,11 +444,9 @@ Page({
     } catch (_e) {}
     initHeart();
 
-    createText(12, 12, 168, 22, 'FOCUSPULSE', 16, C.green);
-    modeWidget = createText(12, 36, 168, 24, 'ENFOQUE', 16, C.blue);
-    bpmWidget = createText(12, 62, 168, 30, '-- BPM', 22, C.white);
-    statusWidget = createText(12, 94, 168, 20, 'Sin lectura', 12, C.muted);
-    timerWidget = createText(12, 118, 168, 48, fmt(state.secondsRemaining), 36, C.white, {
+    createText(12, 14, 168, 22, 'FOCUSPULSE', 15, C.green);
+    modeWidget = createText(8, 44, 176, 28, 'ENFOQUE', 15, C.blue);
+    timerWidget = createText(6, 86, 180, 100, fmt(state.secondsRemaining), 58, C.white, {
       click_func: function () {
         if (!pageAlive) return;
         vibrate(23);
@@ -445,15 +455,18 @@ Page({
     });
 
     if (typeof hmUI !== 'undefined' && hmUI.widget && hmUI.widget.FILL_RECT !== undefined) {
-      for (let i = 0; i < 4; i += 1) {
-        progressDots.push(hmUI.createWidget(hmUI.widget.FILL_RECT, {
-          x: 36 + i * 36, y: 172, w: 12, h: 12, radius: 6, color: C.track,
-        }));
-      }
+      try {
+        hmUI.createWidget(hmUI.widget.FILL_RECT, { x: BAR_X, y: BAR_Y, w: BAR_W, h: 10, radius: 5, color: C.track });
+        progressFill = hmUI.createWidget(hmUI.widget.FILL_RECT, { x: BAR_X, y: BAR_Y, w: 10, h: 10, radius: 5, color: C.track });
+      } catch (_e) { progressFill = null; }
     }
 
-    linkWidget = createText(12, 190, 168, 20, 'Sin enlace con Zepp', 12, C.muted);
-    adviceWidget = createText(12, 212, 168, 22, 'Consejo: pendiente de datos', 11, C.muted);
+    card(10, 226, 172, 98, 0x0d1d20);
+    createText(12, 230, 168, 16, 'PULSO', 12, C.muted);
+    bpmWidget = createText(12, 246, 168, 46, '-- BPM', 34, C.white);
+    statusWidget = createText(12, 294, 168, 24, 'Sin lectura', 13, C.muted);
+
+    linkWidget = createText(8, 334, 176, 22, 'Sin enlace con Zepp', 12, C.muted);
 
     actionWidget = hmUI.createWidget(hmUI.widget.BUTTON, {
       ...actionBtnProps(state),
@@ -465,18 +478,25 @@ Page({
     });
 
     hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 18, y: 302, w: 72, h: 48, radius: 24,
+      x: 16, y: 436, w: 160, h: 46, radius: 23,
       normal_color: 0x242e33, press_color: 0x39434a,
-      text: 'Ajustes', color: C.white, text_size: 13,
-      click_func: function () { openPage('page/settings'); },
+      text: 'Menú', color: C.white, text_size: 14,
+      click_func: function () { openPage('page/menu'); },
     });
 
-    hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 102, y: 302, w: 72, h: 48, radius: 24,
-      normal_color: 0x242e33, press_color: 0x39434a,
-      text: 'Resumen', color: C.white, text_size: 13,
-      click_func: function () { openPage('page/stats'); },
-    });
+    // Swipe up anywhere also opens the menu (same action as the button).
+    try {
+      if (typeof hmApp !== 'undefined' && typeof hmApp.registerGestureEvent === 'function' && hmApp.gesture) {
+        hmApp.registerGestureEvent(function (event) {
+          if (pageAlive && event === hmApp.gesture.UP) {
+            openPage('page/menu');
+            return true;
+          }
+          return false;
+        });
+        gestureOn = true;
+      }
+    } catch (_e) {}
 
     globalThis.__FOCUSPULSE_CONNECTION__ = function () { if (pageAlive) render(); };
     globalThis.__FOCUSPULSE_SEND_TELEMETRY__ = function () { if (pageAlive) sendTelemetry(); };

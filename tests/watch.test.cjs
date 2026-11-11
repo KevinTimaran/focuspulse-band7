@@ -5,8 +5,8 @@ const vm=require('node:vm');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../page/index.js'),'utf8')
   .replace(/^import .*;\s*$/m,'');
-function harness(wearValue=1){
-  let page;const widgets=[],vibrations=[],sent=[];
+function harness(opts={}){const wearValue=1;
+  let page;const widgets=[],vibrations=[],sent=[],scroll=[];
   const state={workDuration:25,restDuration:5,completedSessions:0,totalFocusSeconds:0,
     currentMode:'WORK',timerRunning:false,isPaused:false,secondsRemaining:1500,
     lastBpm:null,isLiveHeartRate:false,measuredAt:0,bleConnected:false,cloudSynced:false,aiRecommendation:''};
@@ -16,14 +16,14 @@ function harness(wearValue=1){
   const context={
     Page(value){page=value;},getApp(){return {globalData:state}},
     hmSensor:{id:{HEART:1,WEAR:2,VIBRATE:3},createSensor(id){return id===1?heart:id===2?wear:vibrator;},deleteSensor(){}},
-    hmUI:{widget:{TEXT:1,ARC:2,BUTTON:3},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},
+    hmUI:{widget:{TEXT:1,ARC:2,BUTTON:3},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},setScrollView(...a){scroll.push(a);},
       createWidget(kind,props){const widget={kind,props:{...props},setProperty(_key,newProps){Object.assign(this.props,newProps);}};widgets.push(widget);return widget;}},
-    hmApp:{gotoPage(){},goBack(){}},sendDeviceMessage(message){sent.push(message);return true;},
+    hmApp:{gotoPage(o){if(opts.pages)opts.pages.push(o.url);},goBack(){},gesture:{UP:1},registerGestureEvent(f){if(opts.onGesture)opts.onGesture(f);},unregisterGestureEvent(){}},sendDeviceMessage(message){sent.push(message);return true;},
     timer:{createTimer(){return 1;},stopTimer(){}},globalThis:{},Date,Math,Number,String,isFinite,
   };
   vm.runInNewContext(source,context);
   page.build();
-  return {page,state,heart,wear,widgets,vibrations,sent};
+  return {page,state,heart,wear,widgets,vibrations,sent,scroll};
 }
 test('watch starts with no BPM; physical CURRENT event alone marks it live',()=>{
   const h=harness();
@@ -55,13 +55,42 @@ test('invalid reading never becomes live; all main actions provide haptic feedba
   assert.equal(action.props.text,'Reanudar');
   h.page.onDestroy();
 });
-test('touch controls remain inside 192x490 with at least 46px height',()=>{
+test('main screen only holds the pomodoro; Menú button and swipe-up open the menu page',()=>{
   const h=harness();
-  for(const w of h.widgets.filter(w=>w.kind===3)){
+  const pages=[];let gesture=null;
+  h.page.cleanup();
+  const h2=harness({pages,onGesture:g=>{gesture=g;}});
+  for(const w of h2.widgets.filter(w=>w.kind===3)){
     assert.ok(w.props.x>=0&&w.props.y>=0&&w.props.x+w.props.w<=192&&w.props.y+w.props.h<=490);
     assert.ok(w.props.w>=46&&w.props.h>=46);
   }
-  h.page.onDestroy();
+  assert.equal(h2.widgets.some(w=>['Ajustes','Resumen','Reiniciar ciclo'].includes(w.props.text)),false);
+  h2.widgets.find(w=>w.props.text==='Menú').props.click_func();
+  assert.deepEqual(pages,['page/menu']);
+  assert.equal(typeof gesture,'function');
+  h2.page.onDestroy();
+});
+test('menu page: three large stacked buttons; reset needs two taps and keeps counters',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'../page/menu.js'),'utf8');
+  let page;const widgets=[],pages=[];
+  const state={workDuration:25,restDuration:5,currentMode:'REST',secondsRemaining:40,timerRunning:true,isPaused:false,completedSessions:3,totalFocusSeconds:4500};
+  vm.runInNewContext(src,{Page:p=>page=p,getApp:()=>({globalData:state}),Date,
+    hmSensor:{id:{VIBRATE:1},createSensor:()=>({stop(){},start(){}}),deleteSensor(){}},
+    hmUI:{widget:{TEXT:1,BUTTON:3},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},
+      createWidget(kind,props){const w={kind,props,setProperty(_k,v){Object.assign(props,v);}};widgets.push(w);return w;}},
+    hmApp:{gotoPage(o){pages.push(o.url);},goBack(){}}});
+  page.build();
+  const big=['Ajustes','Resumen','Reiniciar ciclo'].map(t=>widgets.find(w=>w.props.text===t));
+  for(const w of big){assert.ok(w&&w.props.h>=80&&w.props.x+w.props.w<=192&&w.props.y+w.props.h<=490);}
+  assert.ok(big[0].props.y+big[0].props.h<=big[1].props.y&&big[1].props.y+big[1].props.h<=big[2].props.y,'one below the other');
+  big[0].props.click_func();assert.deepEqual(pages,['page/settings']);
+  page.onDestroy();page.build();
+  const reset=widgets.filter(w=>w.props.text==='Reiniciar ciclo').pop();
+  reset.props.click_func();assert.equal(state.timerRunning,true);assert.equal(reset.props.text,'Seguro? Toca otra vez');
+  reset.props.click_func();
+  assert.equal(state.timerRunning,false);assert.equal(state.currentMode,'WORK');assert.equal(state.secondsRemaining,1500);
+  assert.equal(state.completedSessions,3);assert.equal(state.totalFocusSeconds,4500);
+  page.onDestroy();
 });
 test('settings needs a second tap to reset the cycle without erasing completed work',()=>{
   const settings=fs.readFileSync(path.join(__dirname,'../page/settings.js'),'utf8');
@@ -104,7 +133,7 @@ test('transient send failure does not wipe bleConnected; consecutive failures ma
   vm.runInNewContext(source,context);
   page.build();
   assert.equal(state.bleConnected, true);
-  const linkWidget = widgets.find(w => w.props.y === 190);
+  const linkWidget = widgets.find(w => w.props.y === 334);
   assert.equal(linkWidget.props.text, 'Zepp conectado · sincronizando');
 
   // 1 transient failure should not immediately disconnect bleConnected
@@ -139,7 +168,7 @@ test('transient send failure does not wipe bleConnected; consecutive failures ma
 test('auth and config errors display "Configura cuenta en Zepp" on linkWidget',()=>{
   const h = harness();
   h.state.bleConnected = true;
-  const linkWidget = h.widgets.find(w => w.props.y === 190);
+  const linkWidget = h.widgets.find(w => w.props.y === 334);
 
   // CONFIG error
   h.state.syncError = 'CONFIG';
@@ -162,26 +191,4 @@ test('auth and config errors display "Configura cuenta en Zepp" on linkWidget',(
   assert.equal(linkWidget.props.color, 0x44e4aa, 'green color on cloud sync');
 
   h.page.onDestroy();
-});
-test('menu page: three large stacked buttons; reset needs two taps and keeps counters',()=>{
-  const src=fs.readFileSync(path.join(__dirname,'../page/menu.js'),'utf8');
-  let page;const widgets=[],pages=[];
-  const state={workDuration:25,restDuration:5,currentMode:'REST',secondsRemaining:40,timerRunning:true,isPaused:false,completedSessions:3,totalFocusSeconds:4500};
-  vm.runInNewContext(src,{Page:p=>page=p,getApp:()=>({globalData:state}),Date,
-    hmSensor:{id:{VIBRATE:1},createSensor:()=>({stop(){},start(){}}),deleteSensor(){}},
-    hmUI:{widget:{TEXT:1,BUTTON:3},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},
-      createWidget(kind,props){const w={kind,props,setProperty(_k,v){Object.assign(props,v);}};widgets.push(w);return w;}},
-    hmApp:{gotoPage(o){pages.push(o.url);},goBack(){}}});
-  page.build();
-  const big=['Ajustes','Resumen','Reiniciar ciclo'].map(t=>widgets.find(w=>w.props.text===t));
-  for(const w of big){assert.ok(w&&w.props.h>=80&&w.props.x+w.props.w<=192&&w.props.y+w.props.h<=490);}
-  assert.ok(big[0].props.y+big[0].props.h<=big[1].props.y&&big[1].props.y+big[1].props.h<=big[2].props.y,'one below the other');
-  big[0].props.click_func();assert.deepEqual(pages,['page/settings']);
-  page.onDestroy();page.build();
-  const reset=widgets.filter(w=>w.props.text==='Reiniciar ciclo').pop();
-  reset.props.click_func();assert.equal(state.timerRunning,true);assert.equal(reset.props.text,'Seguro? Toca otra vez');
-  reset.props.click_func();
-  assert.equal(state.timerRunning,false);assert.equal(state.currentMode,'WORK');assert.equal(state.secondsRemaining,1500);
-  assert.equal(state.completedSessions,3);assert.equal(state.totalFocusSeconds,4500);
-  page.onDestroy();
 });
