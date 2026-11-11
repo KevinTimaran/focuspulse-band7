@@ -56,20 +56,23 @@ Page({
     const s = state();
     createPageBackground();
     try { vibrator = hmSensor.createSensor(hmSensor.id.VIBRATE); } catch (_e) {}
+    const box = (y, h) => { try { hmUI.createWidget(hmUI.widget.FILL_RECT, { x: 10, y, w: 172, h, radius: 22, color: 0x0d1d20 }); } catch (_e) {} };
     line(14, 28, 'RESUMEN', 19, C.green);
-    line(48, 22, 'Sesiones completas', 14, C.muted);
-    line(72, 36, String(s.completedSessions), 26, C.white);
-    line(114, 22, 'Tiempo de enfoque', 14, C.muted);
-    line(138, 36, Math.floor(s.totalFocusSeconds / 60) + ' min', 24, C.white);
-    line(180, 22, 'CONSEJO DE IA', 14, C.green);
-    adviceWidget = line(206, 86, s.aiRecommendation || 'Sin consejo todavía', 12, C.white);
+    box(52, 92);
+    line(58, 22, 'Sesiones completas', 14, C.muted);
+    line(84, 52, String(s.completedSessions), 40, C.white);
+    box(152, 92);
+    line(158, 22, 'Tiempo de enfoque', 14, C.muted);
+    line(184, 52, Math.floor(s.totalFocusSeconds / 60) + ' min', 34, C.white);
+    line(256, 22, 'CONSEJO DE IA', 14, C.green);
+    adviceWidget = line(280, 110, s.aiRecommendation || 'Sin consejo todavía', 14, C.white);
     globalThis.__FOCUSPULSE_AI__ = function (message) {
       if (!pageAlive || !adviceWidget) return;
       vibrate();
       try { adviceWidget.setProperty(hmUI.prop.MORE, { text: String(message) }); } catch (_e) {}
     };
     hmUI.createWidget(hmUI.widget.BUTTON, {
-      x: 24, y: 302, w: 144, h: 48, radius: 24,
+      x: 24, y: 410, w: 144, h: 54, radius: 27,
       normal_color: 0x0c765a, press_color: 0x0a513f,
       text: 'Volver', color: C.white, text_size: 16,
       click_func: function () { vibrate(); back(); },
