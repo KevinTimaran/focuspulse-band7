@@ -52,7 +52,7 @@ test('invalid reading never becomes live; all main actions provide haptic feedba
   assert.equal(h.state.timerRunning,true);assert.equal(h.vibrations.at(-1),23);
   assert.equal(action.props.text,'Pausar sesión');
   action.props.click_func();assert.equal(h.state.isPaused,true);
-  assert.equal(action.props.text,'Iniciar sesión');
+  assert.equal(action.props.text,'Reanudar');
   h.page.onDestroy();
 });
 test('touch controls remain inside 192x490 with at least 46px height',()=>{

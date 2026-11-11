@@ -80,7 +80,7 @@ function setText(widget, value, color) {
 }
 
 function actionBtnProps(s) {
-  const label = s.timerRunning ? 'Pausar sesión' : (s.isPaused ? 'Iniciar sesión' : 'Iniciar');
+  const label = s.timerRunning ? 'Pausar sesión' : (s.isPaused ? 'Reanudar' : 'Iniciar');
   return {
     x: 20, y: 242, w: 152, h: 50, radius: 25,
     normal_color: s.timerRunning ? 0x8f4f22 : 0x0c765a,
