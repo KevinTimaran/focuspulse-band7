@@ -92,26 +92,48 @@ test('menu page: three large stacked buttons; reset needs two taps and keeps cou
   assert.equal(state.completedSessions,3);assert.equal(state.totalFocusSeconds,4500);
   page.onDestroy();
 });
-test('settings needs a second tap to reset the cycle without erasing completed work',()=>{
-  const settings=fs.readFileSync(path.join(__dirname,'../page/settings.js'),'utf8');
-  let page;const widgets=[];
-  const state={workDuration:25,restDuration:5,currentMode:'REST',secondsRemaining:100,
-    timerRunning:true,isPaused:false,completedSessions:4,totalFocusSeconds:6000};
-  vm.runInNewContext(settings,{Page:p=>page=p,getApp:()=>({globalData:state}),Date,
-    hmSensor:{id:{VIBRATE:1},createSensor:()=>({stop(){},start(){}}),deleteSensor(){}},
-    hmUI:{widget:{TEXT:1,BUTTON:2},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},
-      createWidget(kind,props){const w={kind,props,setProperty(_key,value){Object.assign(props,value);}};widgets.push(w);return w;}},
-    hmApp:{goBack(){},gotoPage(){}}});
+function settingsHarness(extra={}){
+  const src=fs.readFileSync(path.join(__dirname,'../page/settings.js'),'utf8');
+  let page;const widgets=[],created=[];
+  const state={workDuration:25,restDuration:5,currentMode:'WORK',secondsRemaining:1500,timerRunning:false,isPaused:false,lastTimestamp:0};
+  const pages=[];
+  vm.runInNewContext(src,{Page:p=>page=p,getApp:()=>({globalData:state}),Date,Math,
+    hmSensor:{id:{VIBRATE:1},createSensor(id){created.push(id);return {stop(){},start(){}};},deleteSensor(){}},
+    hmUI:{widget:{TEXT:1,BUTTON:2,FILL_RECT:3},align:{CENTER_H:0,CENTER_V:0},text_style:{NONE:0},prop:{MORE:4},
+      createWidget(kind,props){const w={kind,props:{...props},setProperty(_k,v){Object.assign(this.props,v);}};widgets.push(w);return w;}},
+    hmApp:{goBack(){},gotoPage(o){pages.push(o.url);}},...extra});
   page.build();
-  const work=widgets.find(w=>w.props.text==='25 min');
-  assert.ok(work,'work duration is visible on first render');
-  work.props.click_func();assert.equal(state.workDuration,30);
-  assert.equal(work.props.text,'30 min','tapping the value adjusts it');
-  const reset=widgets.find(w=>w.props.text==='Reiniciar ciclo');
-  reset.props.click_func();assert.equal(state.currentMode,'REST');assert.equal(state.timerRunning,true);
-  reset.props.click_func();assert.equal(state.currentMode,'WORK');assert.equal(state.timerRunning,false);
-  assert.equal(state.secondsRemaining,1800);assert.equal(state.completedSessions,4);
-  assert.equal(state.totalFocusSeconds,6000);page.onDestroy();
+  return {page,state,widgets,created,pages};
+}
+test('settings: centred number card with arrows; numbers are display-only; no vibration',()=>{
+  const h=settingsHarness();
+  const find=(text,x,y)=>h.widgets.find(w=>w.props.text===text&&w.props.x===x&&(y===undefined||w.props.y===y));
+  assert.equal(h.created.length,0,'no vibrator sensor is created on Ajustes');
+  const cur=find('25',8,224);assert.ok(cur,'current focus value in the middle card');
+  assert.equal(cur.props.click_func,undefined,'numbers are not interactive');
+  const downWork=find('▼',8),upWork=find('▲',8),downRest=find('▼',100),upRest=find('▲',100);
+  for(const b of [downWork,upWork,downRest,upRest]){assert.ok(b&&b.kind===2&&b.props.w>=46&&b.props.h>=46&&b.props.x+b.props.w<=192);}
+  assert.ok(upWork.props.y<cur.props.y&&cur.props.y<downWork.props.y,'arrows above and below the card');
+  downWork.props.click_func();assert.equal(h.state.workDuration,30);assert.equal(cur.props.text,'30');
+  assert.equal(find('25',8,198).props.text,'25','previous value now shown above');
+  upWork.props.click_func();upWork.props.click_func();assert.equal(h.state.workDuration,20);
+  for(let i=0;i<3;i++)upWork.props.click_func();assert.equal(h.state.workDuration,5);
+  upWork.props.click_func();assert.equal(h.state.workDuration,60,'wraps 5 -> 60');
+  downWork.props.click_func();assert.equal(h.state.workDuration,5,'wraps 60 -> 5');
+  for(let i=0;i<5;i++)downRest.props.click_func();assert.equal(h.state.restDuration,10);
+  for(let i=0;i<30;i++)downRest.props.click_func();assert.equal(h.state.restDuration,10,'30 steps = full turn');
+  upRest.props.click_func();assert.equal(h.state.restDuration,9);
+  assert.equal(h.state.secondsRemaining,300,'idle timer follows the focus duration');
+  h.page.onDestroy();
+});
+test('settings: Listo returns to the main page and Iniciar ahora starts the timer',()=>{
+  const h=settingsHarness();
+  h.widgets.find(w=>w.props.text==='Iniciar ahora').props.click_func();
+  assert.equal(h.state.timerRunning,true);assert.deepEqual(h.pages,['page/index']);
+  const h2=settingsHarness();
+  h2.widgets.find(w=>w.props.text==='Listo').props.click_func();
+  assert.equal(h2.state.timerRunning,false);assert.deepEqual(h2.pages,['page/index']);
+  for(const w of h2.widgets.filter(w=>w.kind===2)){assert.ok(w.props.x>=0&&w.props.y>=0&&w.props.x+w.props.w<=192&&w.props.y+w.props.h<=490&&w.props.h>=46);}
 });
 test('transient send failure does not wipe bleConnected; consecutive failures mark disconnected and recovery restores link',()=>{
   let sendResult = true;
